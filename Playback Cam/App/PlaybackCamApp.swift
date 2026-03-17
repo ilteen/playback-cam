@@ -1,15 +1,10 @@
-//
-//  Playback_CamApp.swift
-//  Playback Cam
-//
-//  Created by Philipp on 22.02.26.
-//
-
-import SwiftUI
 import AVFAudio
+import SwiftUI
 
 @main
-struct Playback_CamApp: App {
+struct PlaybackCamApp: App {
+    @StateObject private var appViewModel = AppViewModel()
+
     init() {
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
@@ -18,7 +13,7 @@ struct Playback_CamApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AppView(viewModel: appViewModel)
         }
     }
 }
