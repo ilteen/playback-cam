@@ -127,8 +127,8 @@ struct PlaybackScreen: View {
     @ViewBuilder
     private func controlsOverlay(isLandscape: Bool) -> some View {
         if isLandscape {
-            let overlayHorizontalInset: CGFloat = 16
-            let topActionButtonSize: CGFloat = 44
+            let overlayHorizontalInset: CGFloat = 0
+            let topActionButtonSize: CGFloat = 50
             let landscapeControlLaneWidth: CGFloat = 82
             let landscapeControlLaneTrailingInset = overlayHorizontalInset - ((landscapeControlLaneWidth - topActionButtonSize) / 2)
 
@@ -155,7 +155,9 @@ struct PlaybackScreen: View {
                         transportButton(
                             systemName: "backward.end.fill",
                             action: { viewModel.stepFrame(by: -1) },
-                            doubleAction: { viewModel.stepFrame(by: -10) }
+                            doubleAction: { viewModel.stepFrame(by: -10) },
+                            holdAction: { viewModel.beginTransportPlayback(direction: -1) },
+                            holdEndAction: viewModel.endTransportPlayback
                         )
 
                         playPauseButton(size: 40)
@@ -163,7 +165,9 @@ struct PlaybackScreen: View {
                         transportButton(
                             systemName: "forward.end.fill",
                             action: { viewModel.stepFrame(by: 1) },
-                            doubleAction: { viewModel.stepFrame(by: 10) }
+                            doubleAction: { viewModel.stepFrame(by: 10) },
+                            holdAction: { viewModel.beginTransportPlayback(direction: 1) },
+                            holdEndAction: viewModel.endTransportPlayback
                         )
                     }
                     .padding(.vertical, 7)
@@ -191,7 +195,9 @@ struct PlaybackScreen: View {
                         transportButton(
                             systemName: "backward.end.fill",
                             action: { viewModel.stepFrame(by: -1) },
-                            doubleAction: { viewModel.stepFrame(by: -10) }
+                            doubleAction: { viewModel.stepFrame(by: -10) },
+                            holdAction: { viewModel.beginTransportPlayback(direction: -1) },
+                            holdEndAction: viewModel.endTransportPlayback
                         )
 
                         playPauseButton(size: 40)
@@ -199,7 +205,9 @@ struct PlaybackScreen: View {
                         transportButton(
                             systemName: "forward.end.fill",
                             action: { viewModel.stepFrame(by: 1) },
-                            doubleAction: { viewModel.stepFrame(by: 10) }
+                            doubleAction: { viewModel.stepFrame(by: 10) },
+                            holdAction: { viewModel.beginTransportPlayback(direction: 1) },
+                            holdEndAction: viewModel.endTransportPlayback
                         )
                         
                     }
@@ -225,11 +233,9 @@ struct PlaybackScreen: View {
                                     .stroke(.white.opacity(0.14), lineWidth: 1)
                             }
                     }
-                    
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 24)
-                .padding(.bottom, 60)
             }
         }
     }
@@ -271,12 +277,16 @@ struct PlaybackScreen: View {
     private func transportButton(
         systemName: String,
         action: @escaping () -> Void,
-        doubleAction: @escaping () -> Void
+        doubleAction: @escaping () -> Void,
+        holdAction: @escaping () -> Void,
+        holdEndAction: @escaping () -> Void
     ) -> some View {
         PlaybackTransportButton(
             systemName: systemName,
             action: action,
-            doubleAction: doubleAction
+            doubleAction: doubleAction,
+            holdAction: holdAction,
+            holdEndAction: holdEndAction
         )
     }
 
@@ -299,6 +309,10 @@ struct PlaybackScreen: View {
                 }
                 .padding(.bottom, isLandscape ? 28 : 150)
         }
+    }
+
+    private var isRegularRegularSizeClass: Bool {
+        horizontalSizeClass == .regular && verticalSizeClass == .regular
     }
 }
 

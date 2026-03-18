@@ -86,8 +86,13 @@ struct PlaybackTransportButton: View {
     let systemName: String
     let action: () -> Void
     let doubleAction: () -> Void
+    let holdAction: () -> Void
+    let holdEndAction: () -> Void
 
     @GestureState private var isPressed = false
+    @State private var holdTask: Task<Void, Never>?
+    @State private var singleTapTask: Task<Void, Never>?
+    @State private var isHolding = false
 
     var body: some View {
         Image(systemName: systemName)
@@ -102,18 +107,68 @@ struct PlaybackTransportButton: View {
                 Circle()
                     .stroke(.white.opacity(0.14), lineWidth: 1)
             }
-            .scaleEffect(isPressed ? 0.94 : 1)
-            .animation(.easeInOut(duration: 0.12), value: isPressed)
+            .scaleEffect(isPressed || isHolding ? 0.94 : 1)
+            .animation(.easeInOut(duration: 0.12), value: isPressed || isHolding)
             .contentShape(Circle())
-            .simultaneousGesture(
+            .gesture(
                 DragGesture(minimumDistance: 0)
                     .updating($isPressed) { _, state, _ in
                         state = true
                     }
+                    .onChanged { _ in
+                        guard holdTask == nil, !isHolding else { return }
+
+                        holdTask = Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 180_000_000)
+                            guard !Task.isCancelled else { return }
+
+                            singleTapTask?.cancel()
+                            singleTapTask = nil
+                            isHolding = true
+                            holdAction()
+                        }
+                    }
+                    .onEnded { _ in
+                        holdTask?.cancel()
+                        holdTask = nil
+
+                        if isHolding {
+                            isHolding = false
+                            holdEndAction()
+                            return
+                        }
+
+                        handleTap()
+                    }
             )
-            .onTapGesture(count: 2, perform: doubleAction)
-            .onTapGesture(perform: action)
             .accessibilityAddTraits(.isButton)
+            .onDisappear {
+                holdTask?.cancel()
+                holdTask = nil
+                singleTapTask?.cancel()
+                singleTapTask = nil
+
+                if isHolding {
+                    isHolding = false
+                    holdEndAction()
+                }
+            }
+    }
+
+    private func handleTap() {
+        if let singleTapTask {
+            singleTapTask.cancel()
+            self.singleTapTask = nil
+            doubleAction()
+            return
+        }
+
+        singleTapTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            guard !Task.isCancelled else { return }
+            self.singleTapTask = nil
+            action()
+        }
     }
 }
 

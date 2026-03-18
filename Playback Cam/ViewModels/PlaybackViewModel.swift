@@ -4,6 +4,11 @@ import Foundation
 
 @MainActor
 final class PlaybackViewModel: ObservableObject {
+    private enum TransportDirection: Equatable {
+        case backward
+        case forward
+    }
+
     @Published private(set) var state: PlaybackState
     @Published var selectedRate: PlaybackRateOption
     @Published private(set) var saveMessage: String?
@@ -21,6 +26,8 @@ final class PlaybackViewModel: ObservableObject {
     private var observerToken: Any?
     private var playbackEndObserver: NSObjectProtocol?
     private var metadataTask: Task<Void, Never>?
+    private var transportTask: Task<Void, Never>?
+    private var activeTransportDirection: TransportDirection?
 
     init(
         recording: Recording,
@@ -72,6 +79,8 @@ final class PlaybackViewModel: ObservableObject {
     }
 
     func togglePlayback() {
+        stopTransportPlaybackIfNeeded()
+
         if isPreviewMode {
             if state.isPlaying {
                 state.isPlaying = false
@@ -100,6 +109,7 @@ final class PlaybackViewModel: ObservableObject {
     }
 
     func beginScrubbing() {
+        stopTransportPlaybackIfNeeded()
         guard !state.isScrubbing else { return }
 
         state.isScrubbing = true
@@ -130,6 +140,8 @@ final class PlaybackViewModel: ObservableObject {
     }
 
     func stepFrame(by amount: Int) {
+        stopTransportPlaybackIfNeeded()
+
         let nextTime = min(
             max(0, state.currentTime + Double(amount) * state.frameDuration),
             state.duration
@@ -143,7 +155,38 @@ final class PlaybackViewModel: ObservableObject {
         seek(to: nextTime)
     }
 
+    func beginTransportPlayback(direction: Int) {
+        guard direction != 0 else { return }
+        guard activeTransportDirection == nil else { return }
+
+        let transportDirection: TransportDirection = direction < 0 ? .backward : .forward
+
+        if transportDirection == .forward, state.currentTime >= state.duration - state.frameDuration {
+            return
+        }
+
+        if transportDirection == .backward, state.currentTime <= 0 {
+            return
+        }
+
+        state.isPlaying = true
+        activeTransportDirection = transportDirection
+
+        switch transportDirection {
+        case .forward:
+            startForwardTransportPlayback()
+        case .backward:
+            startReverseTransportPlayback()
+        }
+    }
+
+    func endTransportPlayback() {
+        stopTransportPlaybackIfNeeded()
+    }
+
     func discardRecording() {
+        stopTransportPlaybackIfNeeded()
+
         if !isPreviewMode {
             player.pause()
             try? FileManager.default.removeItem(at: recording.videoURL)
@@ -247,6 +290,9 @@ final class PlaybackViewModel: ObservableObject {
     private func tearDownPlayer() {
         metadataTask?.cancel()
         metadataTask = nil
+        transportTask?.cancel()
+        transportTask = nil
+        activeTransportDirection = nil
 
         player.pause()
         state.isPlaying = false
@@ -269,6 +315,78 @@ final class PlaybackViewModel: ObservableObject {
             toleranceBefore: .zero,
             toleranceAfter: .zero
         )
+    }
+
+    private func startForwardTransportPlayback() {
+        guard !isPreviewMode else {
+            startManualTransportPlayback(direction: 1)
+            return
+        }
+
+        player.playImmediately(atRate: Float(selectedRate.rate))
+    }
+
+    private func startReverseTransportPlayback() {
+        guard !isPreviewMode else {
+            startManualTransportPlayback(direction: -1)
+            return
+        }
+
+        player.pause()
+        startManualTransportPlayback(direction: -1)
+    }
+
+    private func startManualTransportPlayback(direction: Int) {
+        transportTask?.cancel()
+
+        transportTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let tickNanoseconds: UInt64 = 22_222_222
+
+            while !Task.isCancelled {
+                let nextTime = min(
+                    max(self.state.currentTime + (Double(direction) * self.selectedRate.rate / 45.0), 0),
+                    self.state.duration
+                )
+
+                if abs(nextTime - self.state.currentTime) < 0.0001 {
+                    break
+                }
+
+                self.state.currentTime = nextTime
+
+                if !self.isPreviewMode {
+                    self.seek(to: nextTime)
+                }
+
+                try? await Task.sleep(nanoseconds: tickNanoseconds)
+            }
+
+            guard !Task.isCancelled else { return }
+
+            self.transportTask = nil
+            self.activeTransportDirection = nil
+            self.state.isPlaying = false
+
+            if !self.isPreviewMode {
+                self.player.pause()
+            }
+        }
+    }
+
+    private func stopTransportPlaybackIfNeeded() {
+        guard activeTransportDirection != nil else { return }
+
+        transportTask?.cancel()
+        transportTask = nil
+        activeTransportDirection = nil
+        state.isPlaying = false
+
+        guard !isPreviewMode else { return }
+
+        player.pause()
+        state.currentTime = min(max(CMTimeGetSeconds(player.currentTime()), 0), state.duration)
     }
 }
 
