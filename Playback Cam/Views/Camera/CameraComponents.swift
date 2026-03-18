@@ -89,19 +89,36 @@ struct CameraShutterButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                Circle()
-                    .stroke(.white.opacity(0.96), lineWidth: 4)
-                    .frame(width: 68, height: 68)
-
-                RoundedRectangle(cornerRadius: isRecording ? 7 : 31, style: .continuous)
-                    .fill(Color(red: 0.98, green: 0.16, blue: 0.2))
-                    .frame(width: isRecording ? 30 : 60, height: isRecording ? 30 : 60)
+                CameraSloMoShutterRing()
+                    .frame(width: 78, height: 78)
+                
+                RoundedRectangle(cornerRadius: isRecording ? 6 : 31, style: .continuous)
+                    //.fill(Color(red: 0.98, green: 0.16, blue: 0.2))
+                    .fill(.red)
+                    .frame(width: isRecording ? 30 : 56, height: isRecording ? 30 : 56)
             }
             .frame(width: 98, height: 98)
             .shadow(color: .black.opacity(0.24), radius: 10, y: 6)
             .animation(.easeInOut(duration: 0.1), value: isRecording)
         }
         .buttonStyle(CameraShutterPressStyle())
+    }
+}
+
+private struct CameraSloMoShutterRing: View {
+    private let stripeCount = 100
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<stripeCount, id: \.self) { index in
+                Rectangle()
+                    .fill(.white.opacity(index.isMultiple(of: 2) ? 0.98 : 0.78))
+                    .frame(width: 1.5, height: 4)
+                    .offset(y: -32)
+                    .rotationEffect(.degrees(Double(index) * (360.0 / Double(stripeCount))))
+            }
+        }
+        .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
     }
 }
 
