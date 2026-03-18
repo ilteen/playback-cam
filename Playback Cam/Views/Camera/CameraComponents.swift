@@ -1,4 +1,6 @@
+@preconcurrency import AVFoundation
 import SwiftUI
+import UIKit
 
 struct CameraPreviewPlaceholder: View {
     var body: some View {
@@ -82,6 +84,92 @@ struct CameraMessagePill: View {
     }
 }
 
+struct CameraGalleryButton: View {
+    let videoURL: URL
+    let isDisabled: Bool
+    let showsProgress: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            CameraGalleryThumbnail(
+                videoURL: videoURL,
+                sideLength: 48,
+                showsProgress: showsProgress
+            )
+        }
+        .buttonStyle(CameraShutterPressStyle())
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.72 : 1)
+    }
+}
+
+struct CameraGalleryThumbnail: View {
+    let videoURL: URL
+    let sideLength: CGFloat
+    let showsProgress: Bool
+
+    @State private var thumbnailImage: UIImage?
+
+    private let cornerRadius: CGFloat = 2
+
+    var body: some View {
+        ZStack {
+            if let thumbnailImage {
+                Image(uiImage: thumbnailImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                LinearGradient(
+                    colors: [.white.opacity(0.16), .white.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                Image(systemName: "play.rectangle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+        }
+        .frame(width: sideLength, height: sideLength)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(.white.opacity(0.18), lineWidth: 1)
+        }
+        .overlay {
+            if showsProgress {
+                ZStack {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(.black.opacity(0.4))
+
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                }
+            }
+        }
+        .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
+        .background {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(.black.opacity(0.3))
+        }
+        .task(id: videoURL) {
+            thumbnailImage = VideoThumbnailService.cachedImage(for: videoURL)
+
+            if thumbnailImage == nil {
+                thumbnailImage = await loadThumbnail()
+            }
+        }
+    }
+
+    private func loadThumbnail() async -> UIImage? {
+        await VideoThumbnailService.prepareThumbnail(for: videoURL)
+    }
+}
+
 struct CameraShutterButton: View {
     let isRecording: Bool
     let action: () -> Void
@@ -105,14 +193,14 @@ struct CameraShutterButton: View {
 }
 
 private struct CameraSloMoShutterRing: View {
-    private let stripeCount = 100
+    private let stripeCount = 112
 
     var body: some View {
         ZStack {
             ForEach(0..<stripeCount, id: \.self) { index in
                 Rectangle()
-                    .fill(.white.opacity(index.isMultiple(of: 2) ? 0.98 : 0.78))
-                    .frame(width: 1.5, height: 4)
+                    .fill(.white)
+                    .frame(width: 1, height: 4)
                     .offset(y: -32)
                     .rotationEffect(.degrees(Double(index) * (360.0 / Double(stripeCount))))
             }

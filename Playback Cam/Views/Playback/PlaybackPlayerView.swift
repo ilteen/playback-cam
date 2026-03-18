@@ -1,30 +1,30 @@
 import AVFoundation
+import AVKit
 import SwiftUI
-import UIKit
 
-struct PlaybackPlayerView: UIViewRepresentable {
+struct PlaybackPlayerView: UIViewControllerRepresentable {
     let player: AVPlayer
 
-    func makeUIView(context: Context) -> PlayerContainerView {
-        let view = PlayerContainerView()
-        view.playerLayer.player = player
-        view.playerLayer.videoGravity = .resizeAspectFill
-        return view
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        configure(controller)
+        return controller
     }
 
-    func updateUIView(_ uiView: PlayerContainerView, context: Context) {
-        uiView.playerLayer.player = player
-        uiView.playerLayer.videoGravity = .resizeAspectFill
+    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
+        configure(uiViewController)
+    }
+
+    private func configure(_ controller: AVPlayerViewController) {
+        controller.player = player
+        controller.showsPlaybackControls = false
+        controller.videoGravity = .resizeAspectFill
+        controller.allowsPictureInPicturePlayback = false
+        controller.updatesNowPlayingInfoCenter = false
+        if #available(iOS 16.0, *) {
+            controller.allowsVideoFrameAnalysis = false
+        }
+        controller.view.backgroundColor = .black
+        controller.contentOverlayView?.backgroundColor = .clear
     }
 }
-
-final class PlayerContainerView: UIView {
-    override class var layerClass: AnyClass {
-        AVPlayerLayer.self
-    }
-
-    var playerLayer: AVPlayerLayer {
-        layer as! AVPlayerLayer
-    }
-}
-

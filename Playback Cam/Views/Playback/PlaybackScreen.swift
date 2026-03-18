@@ -2,8 +2,26 @@ import SwiftUI
 
 struct PlaybackScreen: View {
     @ObservedObject var viewModel: PlaybackViewModel
+    private let showsBackground: Bool
+    private let showsPlaybackSurface: Bool
+    private let showsEdgeTreatment: Bool
+    private let managesPlayerLifecycle: Bool
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    init(
+        viewModel: PlaybackViewModel,
+        showsBackground: Bool = true,
+        showsPlaybackSurface: Bool = true,
+        showsEdgeTreatment: Bool = true,
+        managesPlayerLifecycle: Bool = true
+    ) {
+        self.viewModel = viewModel
+        self.showsBackground = showsBackground
+        self.showsPlaybackSurface = showsPlaybackSurface
+        self.showsEdgeTreatment = showsEdgeTreatment
+        self.managesPlayerLifecycle = managesPlayerLifecycle
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -12,13 +30,19 @@ struct PlaybackScreen: View {
             let usesDeferredSystemGestures = usesLandscapeControls
 
             ZStack {
-                Color.black.ignoresSafeArea()
+                if showsBackground {
+                    Color.black.ignoresSafeArea()
+                }
 
-                playbackSurface
-                    .ignoresSafeArea()
+                if showsPlaybackSurface {
+                    playbackSurface
+                        .ignoresSafeArea()
+                }
 
-                PlaybackEdgeTreatment()
-                    .ignoresSafeArea()
+                if showsEdgeTreatment {
+                    PlaybackEdgeTreatment()
+                        .ignoresSafeArea()
+                }
 
                 topOverlay(isLandscape: usesLandscapeControls)
 
@@ -35,9 +59,11 @@ struct PlaybackScreen: View {
             .defersSystemGestures(on: usesDeferredSystemGestures ? .bottom : [])
         }
         .onAppear {
+            guard managesPlayerLifecycle else { return }
             viewModel.onAppear()
         }
         .onDisappear {
+            guard managesPlayerLifecycle else { return }
             viewModel.onDisappear()
         }
     }
@@ -62,7 +88,7 @@ struct PlaybackScreen: View {
                         .frame(width: 50, height: 50)
                         .background {
                             Circle()
-                                .fill(.black.opacity(0.24))
+                                .fill(.black.opacity(0.7))
                         }
                         .overlay {
                             Circle()
@@ -73,28 +99,32 @@ struct PlaybackScreen: View {
 
                 Spacer(minLength: 0)
 
-                Button(action:  viewModel.saveToPhotoLibrary) {
-                    Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 50, height: 50)
-                        .background {
-                            Circle()
-                                .fill(.black.opacity(0.24))
-                        }
-                        .overlay {
-                            Circle()
-                                .stroke(.white.opacity(0.14), lineWidth: 1)
-                        }
+                if viewModel.showsSaveButton {
+                    Button(action:  viewModel.saveToPhotoLibrary) {
+                        Image(systemName: "square.and.arrow.down")
+                            .padding(.bottom, 5)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 50, height: 50)
+                            .background {
+                                Circle()
+                                    .fill(.black.opacity(0.7))
+                            }
+                            .overlay {
+                                Circle()
+                                    .stroke(.white.opacity(0.14), lineWidth: 1)
+                            }
                 }
                 .buttonStyle(PlaybackPressStyle())
+                .opacity(viewModel.isSaving ? 0.42 : 1)
                 .overlay {
                     if viewModel.isSaving {
                         ProgressView()
-                            .tint(.white)
+                                .tint(.white)
+                        }
                     }
+                    .disabled(viewModel.isSaving)
                 }
-                .disabled(viewModel.isSaving)
             }
             .padding(.top, 10)
             .padding(.horizontal, isLandscape ? 0 : 10)

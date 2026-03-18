@@ -9,8 +9,18 @@ final class PlaybackViewModel: ObservableObject {
         case forward
     }
 
+    private enum PresentationMode {
+        case review(
+            onDiscard: () -> Void,
+            onSaveStarted: (Recording) -> Void,
+            onSaveFinished: () -> Void,
+            onKeep: () -> Void,
+            onSavedToSession: (Recording) -> Void
+        )
+        case gallery(onClose: () -> Void)
+    }
+
     @Published private(set) var state: PlaybackState
-    @Published var selectedRate: PlaybackRateOption
     @Published private(set) var saveMessage: String?
     @Published private(set) var isSaving = false
 
@@ -18,9 +28,9 @@ final class PlaybackViewModel: ObservableObject {
     let isPreviewMode: Bool
     let recording: Recording
 
+    private let playbackSettings: PlaybackSettingsStore
     private let recordingSaver: RecordingSaving
-    private let onDiscard: () -> Void
-    private let onKeep: () -> Void
+    private let presentationMode: PresentationMode
 
     private var wasPlayingBeforeScrub = false
     private var observerToken: Any?
@@ -28,21 +38,47 @@ final class PlaybackViewModel: ObservableObject {
     private var metadataTask: Task<Void, Never>?
     private var transportTask: Task<Void, Never>?
     private var activeTransportDirection: TransportDirection?
+    private var cancellables = Set<AnyCancellable>()
 
     init(
         recording: Recording,
+        playbackSettings: PlaybackSettingsStore,
         recordingSaver: RecordingSaving = PhotoLibraryService(),
         onDiscard: @escaping () -> Void,
-        onKeep: @escaping () -> Void
+        onSaveStarted: @escaping (Recording) -> Void,
+        onSaveFinished: @escaping () -> Void,
+        onKeep: @escaping () -> Void,
+        onSavedToSession: @escaping (Recording) -> Void
     ) {
         self.recording = recording
+        self.playbackSettings = playbackSettings
         self.recordingSaver = recordingSaver
-        self.onDiscard = onDiscard
-        self.onKeep = onKeep
+        self.presentationMode = .review(
+            onDiscard: onDiscard,
+            onSaveStarted: onSaveStarted,
+            onSaveFinished: onSaveFinished,
+            onKeep: onKeep,
+            onSavedToSession: onSavedToSession
+        )
         self.player = AVPlayer()
         self.state = PlaybackState()
-        self.selectedRate = .quarter
         self.isPreviewMode = false
+        bindPlaybackSettings()
+    }
+
+    init(
+        galleryRecording recording: Recording,
+        playbackSettings: PlaybackSettingsStore,
+        onClose: @escaping () -> Void
+    ) {
+        self.recording = recording
+        self.playbackSettings = playbackSettings
+        self.recordingSaver = PhotoLibraryService()
+        self.presentationMode = .gallery(onClose: onClose)
+        self.player = AVPlayer()
+        self.state = PlaybackState()
+        self.isPreviewMode = false
+        bindPlaybackSettings()
     }
 
     #if DEBUG
@@ -52,15 +88,35 @@ final class PlaybackViewModel: ObservableObject {
         selectedRate: PlaybackRateOption
     ) {
         self.recording = recording
+        let settings = PlaybackSettingsStore()
+        settings.selectedRate = selectedRate
+        self.playbackSettings = settings
         self.recordingSaver = PhotoLibraryService()
-        self.onDiscard = {}
-        self.onKeep = {}
+        self.presentationMode = .review(
+            onDiscard: {},
+            onSaveStarted: { _ in },
+            onSaveFinished: {},
+            onKeep: {},
+            onSavedToSession: { _ in }
+        )
         self.player = AVPlayer()
         self.state = previewState
-        self.selectedRate = selectedRate
         self.isPreviewMode = true
+        bindPlaybackSettings()
     }
     #endif
+
+    var selectedRate: PlaybackRateOption {
+        playbackSettings.selectedRate
+    }
+
+    var showsSaveButton: Bool {
+        if case .review = presentationMode {
+            return true
+        }
+
+        return false
+    }
 
     func onAppear() {
         guard !isPreviewMode else { return }
@@ -73,9 +129,7 @@ final class PlaybackViewModel: ObservableObject {
     }
 
     func selectPlaybackRate(_ option: PlaybackRateOption) {
-        selectedRate = option
-        guard state.isPlaying, !isPreviewMode else { return }
-        player.rate = Float(option.rate)
+        playbackSettings.selectedRate = option
     }
 
     func togglePlayback() {
@@ -105,7 +159,7 @@ final class PlaybackViewModel: ObservableObject {
         }
 
         state.isPlaying = true
-        player.playImmediately(atRate: Float(selectedRate.rate))
+        player.playImmediately(atRate: Float(effectivePlaybackRate(for: selectedRate)))
     }
 
     func beginScrubbing() {
@@ -136,7 +190,7 @@ final class PlaybackViewModel: ObservableObject {
         state.isPlaying = true
 
         guard !isPreviewMode else { return }
-        player.playImmediately(atRate: Float(selectedRate.rate))
+        player.playImmediately(atRate: Float(effectivePlaybackRate(for: selectedRate)))
     }
 
     func stepFrame(by amount: Int) {
@@ -187,43 +241,59 @@ final class PlaybackViewModel: ObservableObject {
     func discardRecording() {
         stopTransportPlaybackIfNeeded()
 
-        if !isPreviewMode {
-            player.pause()
-            try? FileManager.default.removeItem(at: recording.videoURL)
+        switch presentationMode {
+        case let .review(onDiscard, _, _, _, _):
+            if !isPreviewMode {
+                player.pause()
+                try? FileManager.default.removeItem(at: recording.videoURL)
+            }
+            onDiscard()
+
+        case let .gallery(onClose):
+            if !isPreviewMode {
+                player.pause()
+            }
+            onClose()
         }
-        onDiscard()
     }
 
     func saveToPhotoLibrary() {
         guard !isSaving else { return }
+        guard case let .review(_, onSaveStarted, onSaveFinished, onKeep, onSavedToSession) = presentationMode else { return }
 
         guard !isPreviewMode else {
             saveMessage = "Preview only."
             return
         }
 
+        stopTransportPlaybackIfNeeded()
+        state.isPlaying = false
+        player.pause()
         isSaving = true
         saveMessage = nil
+        onSaveStarted(recording)
+        onKeep()
 
         Task {
-            let result = await recordingSaver.save(recording: recording)
+            let result = await recordingSaver.save(recording: recording, playbackRate: selectedRate)
 
             switch result {
-            case .saved:
+            case let .saved(savedRecording):
+                onSavedToSession(savedRecording)
                 try? FileManager.default.removeItem(at: recording.videoURL)
                 isSaving = false
-                saveMessage = "Saved"
-
-                try? await Task.sleep(nanoseconds: 350_000_000)
-                onKeep()
+                saveMessage = nil
+                onSaveFinished()
 
             case .denied:
                 isSaving = false
                 saveMessage = "Photo Library access denied."
+                onSaveFinished()
 
             case .failed:
                 isSaving = false
                 saveMessage = "Save failed."
+                onSaveFinished()
             }
         }
     }
@@ -317,13 +387,24 @@ final class PlaybackViewModel: ObservableObject {
         )
     }
 
+    private func bindPlaybackSettings() {
+        playbackSettings.$selectedRate
+            .sink { [weak self] option in
+                guard let self else { return }
+                self.objectWillChange.send()
+                guard self.state.isPlaying, !self.isPreviewMode else { return }
+                self.player.rate = Float(self.effectivePlaybackRate(for: option))
+            }
+            .store(in: &cancellables)
+    }
+
     private func startForwardTransportPlayback() {
         guard !isPreviewMode else {
             startManualTransportPlayback(direction: 1)
             return
         }
 
-        player.playImmediately(atRate: Float(selectedRate.rate))
+        player.playImmediately(atRate: Float(effectivePlaybackRate(for: selectedRate)))
     }
 
     private func startReverseTransportPlayback() {
@@ -345,8 +426,9 @@ final class PlaybackViewModel: ObservableObject {
             let tickNanoseconds: UInt64 = 22_222_222
 
             while !Task.isCancelled {
+                let effectiveRate = self.effectivePlaybackRate(for: self.selectedRate)
                 let nextTime = min(
-                    max(self.state.currentTime + (Double(direction) * self.selectedRate.rate / 45.0), 0),
+                    max(self.state.currentTime + (Double(direction) * effectiveRate / 45.0), 0),
                     self.state.duration
                 )
 
@@ -387,6 +469,10 @@ final class PlaybackViewModel: ObservableObject {
 
         player.pause()
         state.currentTime = min(max(CMTimeGetSeconds(player.currentTime()), 0), state.duration)
+    }
+
+    private func effectivePlaybackRate(for option: PlaybackRateOption) -> Double {
+        option.rate / max(recording.basePlaybackRate, 0.01)
     }
 }
 

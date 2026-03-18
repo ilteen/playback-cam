@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct PlaybackCamApp: App {
+    @UIApplicationDelegateAdaptor(PlaybackCamAppDelegate.self) private var appDelegate
     @StateObject private var appViewModel = AppViewModel()
 
     init() {
