@@ -93,7 +93,6 @@ struct CameraShutterButton: View {
                     .frame(width: 78, height: 78)
                 
                 RoundedRectangle(cornerRadius: isRecording ? 6 : 31, style: .continuous)
-                    //.fill(Color(red: 0.98, green: 0.16, blue: 0.2))
                     .fill(.red)
                     .frame(width: isRecording ? 30 : 56, height: isRecording ? 30 : 56)
             }

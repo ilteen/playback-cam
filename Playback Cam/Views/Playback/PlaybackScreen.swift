@@ -1,4 +1,3 @@
-import AVKit
 import SwiftUI
 
 struct PlaybackScreen: View {
@@ -48,7 +47,7 @@ struct PlaybackScreen: View {
         if viewModel.isPreviewMode {
             PlaybackPreviewPlaceholder()
         } else {
-            VideoPlayer(player: viewModel.player)
+            PlaybackPlayerView(player: viewModel.player)
                 .allowsHitTesting(false)
         }
     }
