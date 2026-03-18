@@ -3,10 +3,13 @@ import SwiftUI
 struct CameraScreen: View {
     @ObservedObject var viewModel: CameraViewModel
     @Environment(\.openURL) private var openURL
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
         GeometryReader { proxy in
             let isLandscape = proxy.size.width > proxy.size.height
+            let usesLandscapeControls = isLandscape || isRegularRegularSizeClass
 
             ZStack {
                 captureSurface
@@ -28,10 +31,10 @@ struct CameraScreen: View {
                     .padding(.horizontal, 16)
                 }
 
-                controlsOverlay(isLandscape: isLandscape)
+                controlsOverlay(isLandscape: usesLandscapeControls)
             }
             .background(.black)
-            .animation(.easeInOut(duration: 0.2), value: isLandscape)
+            .animation(.easeInOut(duration: 0.2), value: usesLandscapeControls)
         }
         .onAppear {
             viewModel.onAppear()
@@ -76,7 +79,7 @@ struct CameraScreen: View {
                     zoomPicker
                     captureButton
                 }
-                .padding(.bottom, 18)
+                .padding(.bottom, 25)
             }
         } else {
             VStack {
@@ -106,7 +109,7 @@ struct CameraScreen: View {
 
     @ViewBuilder
     private var zoomPicker: some View {
-        if viewModel.state.availableZoomOptions.count > 1 {
+        if viewModel.showsZoomPicker {
             CameraZoomPicker(
                 options: viewModel.state.availableZoomOptions,
                 selectedOption: viewModel.state.selectedZoomOption,
@@ -114,6 +117,10 @@ struct CameraScreen: View {
                 onSelect: viewModel.selectZoomOption
             )
         }
+    }
+
+    private var isRegularRegularSizeClass: Bool {
+        horizontalSizeClass == .regular && verticalSizeClass == .regular
     }
 }
 

@@ -32,6 +32,10 @@ final class CameraViewModel: ObservableObject {
         state.requiresPermissionAlert
     }
 
+    var showsZoomPicker: Bool {
+        state.availableZoomOptions.contains(.wide) && state.availableZoomOptions.contains(.ultraWide)
+    }
+
     func onAppear() {
         service.startSessionIfNeeded()
     }

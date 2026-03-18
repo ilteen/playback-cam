@@ -3,10 +3,14 @@ import SwiftUI
 
 struct PlaybackScreen: View {
     @ObservedObject var viewModel: PlaybackViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
         GeometryReader { proxy in
             let isLandscape = proxy.size.width > proxy.size.height
+            let usesLandscapeControls = isLandscape || isRegularRegularSizeClass
+            let usesDeferredSystemGestures = usesLandscapeControls
 
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -17,17 +21,19 @@ struct PlaybackScreen: View {
                 PlaybackEdgeTreatment()
                     .ignoresSafeArea()
 
-                topOverlay(isLandscape: isLandscape)
+                topOverlay(isLandscape: usesLandscapeControls)
 
-                controlsOverlay(isLandscape: isLandscape)
+                controlsOverlay(isLandscape: usesLandscapeControls)
 
-                scrubOverlay(isLandscape: isLandscape)
+                scrubOverlay(isLandscape: usesLandscapeControls)
 
                 if let saveMessage = viewModel.saveMessage {
-                    saveToast(message: saveMessage, isLandscape: isLandscape)
+                    saveToast(message: saveMessage, isLandscape: usesLandscapeControls)
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: isLandscape)
+            .animation(.easeInOut(duration: 0.18), value: usesLandscapeControls)
+            .persistentSystemOverlays(usesDeferredSystemGestures ? .hidden : .visible)
+            .defersSystemGestures(on: usesDeferredSystemGestures ? .bottom : [])
         }
         .onAppear {
             viewModel.onAppear()
@@ -47,20 +53,42 @@ struct PlaybackScreen: View {
         }
     }
 
-    private func topOverlay(isLandscape _: Bool) -> some View {
+    private func topOverlay(isLandscape: Bool) -> some View {
         VStack {
             HStack {
-                PlaybackCircleButton(systemName: "xmark") {
-                    viewModel.discardRecording()
+                Button(action: viewModel.discardRecording) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 50, height: 50)
+                        .background {
+                            Circle()
+                                .fill(.black.opacity(0.24))
+                        }
+                        .overlay {
+                            Circle()
+                                .stroke(.white.opacity(0.14), lineWidth: 1)
+                        }
                 }
-                
-                
+                .buttonStyle(PlaybackPressStyle())
 
                 Spacer(minLength: 0)
 
-                PlaybackCircleButton(systemName: "square.and.arrow.down") {
-                    viewModel.saveToPhotoLibrary()
+                Button(action:  viewModel.saveToPhotoLibrary) {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 50, height: 50)
+                        .background {
+                            Circle()
+                                .fill(.black.opacity(0.24))
+                        }
+                        .overlay {
+                            Circle()
+                                .stroke(.white.opacity(0.14), lineWidth: 1)
+                        }
                 }
+                .buttonStyle(PlaybackPressStyle())
                 .overlay {
                     if viewModel.isSaving {
                         ProgressView()
@@ -69,8 +97,8 @@ struct PlaybackScreen: View {
                 }
                 .disabled(viewModel.isSaving)
             }
-            .padding(.horizontal, 16)
             .padding(.top, 10)
+            .padding(.horizontal, isLandscape ? 0 : 10)
 
             Spacer(minLength: 0)
         }
@@ -81,11 +109,6 @@ struct PlaybackScreen: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 12) {
-//                Text(viewModel.timeString(for: viewModel.state.currentTime))
-//                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-//                    .foregroundStyle(.white.opacity(0.92))
-//                    .frame(minWidth: 58, alignment: .leading)
-
                 KnoblessScrubBar(
                     progress: viewModel.state.scrubFraction,
                     onScrubStart: viewModel.beginScrubbing,
@@ -93,16 +116,11 @@ struct PlaybackScreen: View {
                     onScrubEnded: viewModel.endScrubbing
                 )
                 .frame(height: 20)
-
-//                Text(viewModel.timeString(for: viewModel.state.duration))
-//                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-//                    .foregroundStyle(.white.opacity(0.7))
-//                    .frame(minWidth: 58, alignment: .trailing)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .padding(.horizontal, isLandscape ? 108 : 12)
-            .padding(.bottom, 12)
+            .padding(.bottom, isLandscape ? 12 : 100)
         }
     }
 
