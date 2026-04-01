@@ -15,7 +15,7 @@ struct AppIconView: View {
 
                 Image(systemName: "arrow.counterclockwise")
                     .font(.system(size: 224, weight: .bold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.white)
                     .symbolRenderingMode(.hierarchical)
                     .offset(y: -16)
                     .opacity(0.8)
