@@ -25,9 +25,9 @@ enum CameraCaptureMode: String, CaseIterable {
     var accessibilityLabel: String {
         switch self {
         case .slowMo:
-            return "Slow motion recording mode"
+            return String(localized: "Slow motion recording mode")
         case .delayedPlayback:
-            return "Delayed video playback mode"
+            return String(localized: "Delayed video playback mode")
         }
     }
 
@@ -38,9 +38,9 @@ enum CameraCaptureMode: String, CaseIterable {
     var toggleAccessibilityLabel: String {
         switch toggleMode {
         case .slowMo:
-            return "Switch to slow motion recording mode"
+            return String(localized: "Switch to slow motion recording mode")
         case .delayedPlayback:
-            return "Switch to delayed video playback mode"
+            return String(localized: "Switch to delayed video playback mode")
         }
     }
 }
@@ -63,7 +63,15 @@ enum DelayedPlaybackDelayOption: Int, CaseIterable, Identifiable {
     }
 
     var accessibilityLabel: String {
-        "\(rawValue) second delay"
+        if rawValue == 1 {
+            return String(localized: "1-second delay")
+        }
+
+        return String(
+            format: String(localized: "%d-second delay"),
+            locale: .current,
+            rawValue
+        )
     }
 }
 

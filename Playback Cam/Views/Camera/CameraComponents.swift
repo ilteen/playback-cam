@@ -262,7 +262,7 @@ struct CameraDelayedPlaybackLoadingIndicator: View {
                 .controlSize(.regular)
                 .tint(.white)
 
-            Text("Buffering \(selectedDelayOption.rawValue)s delay")
+            Text(loadingText)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.9))
         }
@@ -276,6 +276,14 @@ struct CameraDelayedPlaybackLoadingIndicator: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(.white.opacity(0.14), lineWidth: 1)
         }
+    }
+
+    private var loadingText: String {
+        String(
+            format: String(localized: "Buffering %d s delay"),
+            locale: .current,
+            selectedDelayOption.rawValue
+        )
     }
 }
 

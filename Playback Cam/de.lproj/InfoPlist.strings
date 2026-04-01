@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "Playback Cam benötigt Kamerazugriff, um Zeitlupen- und verzögerte Videos aufzunehmen.";
+"NSPhotoLibraryAddUsageDescription" = "Playback Cam speichert aufgenommene Clips in deiner Fotomediathek.";
+"NSPhotoLibraryUsageDescription" = "Playback Cam benötigt Zugriff auf die Fotomediathek, um gespeicherte Clips zu verwalten und zu löschen.";

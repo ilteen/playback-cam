@@ -114,7 +114,7 @@ final class LiveCameraSessionService: NSObject, CameraSessionControlling {
         guard state.captureMode == .slowMo else { return }
         guard !state.isRecording else { return }
         guard configured else {
-            state.errorMessage = "Camera setup not finished."
+            state.errorMessage = String(localized: "Camera setup not finished.")
             return
         }
 
@@ -266,7 +266,7 @@ final class LiveCameraSessionService: NSObject, CameraSessionControlling {
 
             guard let wide else {
                 Task { @MainActor in
-                    self.state.errorMessage = "Back camera unavailable."
+                    self.state.errorMessage = String(localized: "Back camera unavailable.")
                 }
                 return
             }
@@ -283,7 +283,7 @@ final class LiveCameraSessionService: NSObject, CameraSessionControlling {
                 let videoInput = try AVCaptureDeviceInput(device: wide)
                 guard self.session.canAddInput(videoInput) else {
                     Task { @MainActor in
-                        self.state.errorMessage = "Camera configuration failed."
+                        self.state.errorMessage = String(localized: "Camera configuration failed.")
                     }
                     return
                 }
@@ -297,7 +297,7 @@ final class LiveCameraSessionService: NSObject, CameraSessionControlling {
 
                 guard self.session.canAddOutput(self.videoDataOutput) else {
                     Task { @MainActor in
-                        self.state.errorMessage = "Camera configuration failed."
+                        self.state.errorMessage = String(localized: "Camera configuration failed.")
                     }
                     return
                 }
@@ -306,7 +306,7 @@ final class LiveCameraSessionService: NSObject, CameraSessionControlling {
 
                 guard self.session.canAddOutput(self.movieOutput) else {
                     Task { @MainActor in
-                        self.state.errorMessage = "Camera configuration failed."
+                        self.state.errorMessage = String(localized: "Camera configuration failed.")
                     }
                     return
                 }
@@ -339,7 +339,7 @@ final class LiveCameraSessionService: NSObject, CameraSessionControlling {
                 }
             } catch {
                 Task { @MainActor in
-                    self.state.errorMessage = "Camera configuration failed."
+                    self.state.errorMessage = String(localized: "Camera configuration failed.")
                 }
             }
         }
@@ -506,7 +506,7 @@ final class LiveCameraSessionService: NSObject, CameraSessionControlling {
             session.commitConfiguration()
 
             Task { @MainActor in
-                self.state.errorMessage = "Could not switch lenses."
+                self.state.errorMessage = String(localized: "Could not switch lenses.")
             }
         }
     }
@@ -671,7 +671,7 @@ extension LiveCameraSessionService: AVCaptureFileOutputRecordingDelegate {
             } else {
                 result = nil
                 try? FileManager.default.removeItem(at: outputFileURL)
-                self.state.errorMessage = "Recording failed."
+                self.state.errorMessage = String(localized: "Recording failed.")
             }
 
             self.state.isRecording = false

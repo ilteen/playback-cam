@@ -187,10 +187,10 @@ struct GalleryScreen: View {
                     removeDeletedRecording(withID: recording.id)
 
                 case .denied:
-                    activeAlert = .deleteFailed("Photo Library access was denied.")
+                    activeAlert = .deleteFailed(String(localized: "Photo Library access was denied."))
 
                 case .failed:
-                    activeAlert = .deleteFailed("The video could not be removed from Photos.")
+                    activeAlert = .deleteFailed(String(localized: "The video could not be removed from Photos."))
                 }
             }
         }

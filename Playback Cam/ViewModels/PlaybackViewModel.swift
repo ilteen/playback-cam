@@ -278,7 +278,7 @@ final class PlaybackViewModel: ObservableObject {
         guard case let .review(_, onSaveStarted, onSaveFinished, onKeep, onSavedToSession) = presentationMode else { return }
 
         guard !isPreviewMode else {
-            saveMessage = "Preview only."
+            saveMessage = String(localized: "Preview only.")
             return
         }
 
@@ -303,12 +303,12 @@ final class PlaybackViewModel: ObservableObject {
 
             case .denied:
                 isSaving = false
-                saveMessage = "Photo Library access denied."
+                saveMessage = String(localized: "Photo Library access denied.")
                 onSaveFinished()
 
             case .failed:
                 isSaving = false
-                saveMessage = "Save failed."
+                saveMessage = String(localized: "Save failed.")
                 onSaveFinished()
             }
         }
