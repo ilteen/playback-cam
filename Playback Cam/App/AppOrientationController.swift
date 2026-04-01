@@ -6,35 +6,17 @@ final class AppOrientationController {
     static let shared = AppOrientationController()
 
     private(set) var supportedOrientations: UIInterfaceOrientationMask = {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            return .all
-        }
-
         return .portrait
     }()
 
     private init() {}
 
     func applyCameraPolicy() {
-        let targetMask: UIInterfaceOrientationMask
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            targetMask = .all
-        } else {
-            targetMask = .portrait
-        }
-
-        apply(mask: targetMask)
+        apply(mask: .portrait)
     }
 
     func applyPlaybackPolicy() {
-        let targetMask: UIInterfaceOrientationMask
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            targetMask = .all
-        } else {
-            targetMask = .allButUpsideDown
-        }
-
-        apply(mask: targetMask)
+        apply(mask: .allButUpsideDown)
     }
 
     private func apply(mask: UIInterfaceOrientationMask) {

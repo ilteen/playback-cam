@@ -3,7 +3,6 @@ import UIKit
 
 struct AppView: View {
     @ObservedObject var viewModel: AppViewModel
-    @State private var galleryThumbnailFrame: CGRect?
     @State private var showsPlaybackTransitionCover = false
     private let orientationController = AppOrientationController.shared
 
@@ -33,7 +32,7 @@ struct AppView: View {
                         lastSavedRecording: viewModel.lastSessionSavedRecording,
                         pendingGallerySaveRecording: viewModel.pendingGallerySaveRecording,
                         onOpenGallery: viewModel.openGallery,
-                        onGalleryThumbnailFrameChange: { galleryThumbnailFrame = $0 },
+                        onGalleryThumbnailFrameChange: { _ in },
                         delaysSessionStart: false
                     )
                     .transition(.opacity.animation(.easeInOut(duration: 0.18)))
@@ -50,7 +49,9 @@ struct AppView: View {
         .coordinateSpace(name: "app-root")
         .preferredColorScheme(.dark)
         .statusBar(hidden: !usesPlaybackOrientation)
-        .onAppear(perform: updateOrientationPolicy)
+        .onAppear {
+            updateOrientationPolicy()
+        }
         .onChange(of: pendingPlaybackID) { _, newValue in
             guard newValue != nil else { return }
 

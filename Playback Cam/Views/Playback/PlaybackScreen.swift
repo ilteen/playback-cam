@@ -6,8 +6,7 @@ struct PlaybackScreen: View {
     private let showsPlaybackSurface: Bool
     private let showsEdgeTreatment: Bool
     private let managesPlayerLifecycle: Bool
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var deviceOrientation = UIDevice.current.orientation
 
     init(
         viewModel: PlaybackViewModel,
@@ -26,7 +25,7 @@ struct PlaybackScreen: View {
     var body: some View {
         GeometryReader { proxy in
             let isLandscape = proxy.size.width > proxy.size.height
-            let usesLandscapeControls = isLandscape || isRegularRegularSizeClass
+            let usesLandscapeControls = isLandscape
             let usesDeferredSystemGestures = usesLandscapeControls
 
             ZStack {
@@ -48,7 +47,7 @@ struct PlaybackScreen: View {
 
                 controlsOverlay(isLandscape: usesLandscapeControls)
 
-                scrubOverlay(isLandscape: usesLandscapeControls)
+                scrubOverlay(isLandscape: usesLandscapeControls, availableWidth: proxy.size.width)
 
                 if let saveMessage = viewModel.saveMessage {
                     saveToast(message: saveMessage, isLandscape: usesLandscapeControls)
@@ -59,12 +58,18 @@ struct PlaybackScreen: View {
             .defersSystemGestures(on: usesDeferredSystemGestures ? .bottom : [])
         }
         .onAppear {
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            updateDeviceOrientation(with: UIDevice.current.orientation)
             guard managesPlayerLifecycle else { return }
             viewModel.onAppear()
         }
         .onDisappear {
+            UIDevice.current.endGeneratingDeviceOrientationNotifications()
             guard managesPlayerLifecycle else { return }
             viewModel.onDisappear()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            updateDeviceOrientation(with: UIDevice.current.orientation)
         }
     }
 
@@ -79,7 +84,16 @@ struct PlaybackScreen: View {
     }
 
     private func topOverlay(isLandscape: Bool) -> some View {
-        VStack {
+        let edgeInset: CGFloat
+        if isPad {
+            edgeInset = 46
+        } else if isLandscape {
+            edgeInset = 0
+        } else {
+            edgeInset = 10
+        }
+
+        return VStack {
             HStack {
                 Button(action: viewModel.discardRecording) {
                     Image(systemName: "xmark")
@@ -126,14 +140,14 @@ struct PlaybackScreen: View {
                     .disabled(viewModel.isSaving)
                 }
             }
-            .padding(.top, 10)
-            .padding(.horizontal, isLandscape ? 0 : 10)
+            .padding(.top, isPad ? 22 : 10)
+            .padding(.horizontal, edgeInset)
 
             Spacer(minLength: 0)
         }
     }
 
-    private func scrubOverlay(isLandscape: Bool) -> some View {
+    private func scrubOverlay(isLandscape: Bool, availableWidth: CGFloat) -> some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
 
@@ -146,19 +160,70 @@ struct PlaybackScreen: View {
                 )
                 .frame(height: 20)
             }
+            .frame(maxWidth: isPad ? availableWidth * 0.5 : .infinity)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .padding(.horizontal, isLandscape ? 108 : 12)
-            .padding(.bottom, isLandscape ? 12 : 100)
+            .padding(.horizontal, isLandscape ? (isPad ? 0 : 108) : 12)
+            .padding(.bottom, isPad ? 24 : (isLandscape ? 12 : 100))
         }
     }
 
     @ViewBuilder
     private func controlsOverlay(isLandscape: Bool) -> some View {
-        if isLandscape {
-            let overlayHorizontalInset: CGFloat = 0
+        if isPad {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+
+                ZStack {
+                    VStack(spacing: 14) {
+                        transportButton(
+                            systemName: "backward.end.fill",
+                            action: { viewModel.stepFrame(by: -10) },
+                            doubleAction: { viewModel.step(by: -1) },
+                            holdAction: { viewModel.beginTransportPlayback(direction: -1) },
+                            holdEndAction: viewModel.endTransportPlayback
+                        )
+
+                        playPauseButton(size: 40)
+
+                        transportButton(
+                            systemName: "forward.end.fill",
+                            action: { viewModel.stepFrame(by: 10) },
+                            doubleAction: { viewModel.step(by: 1) },
+                            holdAction: { viewModel.beginTransportPlayback(direction: 1) },
+                            holdEndAction: viewModel.endTransportPlayback
+                        )
+                    }
+                    .padding(.vertical, 7)
+                    .padding(.horizontal, 7)
+                    .background {
+                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                            .fill(.black.opacity(0.7))
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                            .stroke(.white.opacity(0.14), lineWidth: 1)
+                    }
+
+                    speedPicker(isLandscape: true)
+                        .background {
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .fill(.black.opacity(0.7))
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .stroke(.white.opacity(0.14), lineWidth: 1)
+                        }
+                        .offset(y: 150)
+                }
+                .frame(width: 98)
+                .frame(maxHeight: .infinity)
+                .padding(.trailing, 24)
+            }
+        } else if isLandscape {
+            let overlayHorizontalInset: CGFloat = isPad ? 24 : 0
             let topActionButtonSize: CGFloat = 50
-            let landscapeControlLaneWidth: CGFloat = 82
+            let landscapeControlLaneWidth: CGFloat = isPad ? 76 : 82
             let landscapeControlLaneTrailingInset = overlayHorizontalInset - ((landscapeControlLaneWidth - topActionButtonSize) / 2)
 
             HStack(spacing: 0) {
@@ -177,14 +242,15 @@ struct PlaybackScreen: View {
                                 RoundedRectangle(cornerRadius: 30, style: .continuous)
                                     .stroke(.white.opacity(0.14), lineWidth: 1)
                             }
-                            .padding(.bottom, -26)
+                            .offset(x: isPad ? -16 : 0, y: isPad ? -38 : 0)
+                            .padding(.bottom, isPad ? 48 : -26)
                     }
 
                     VStack(spacing: 14) {
                         transportButton(
                             systemName: "backward.end.fill",
-                            action: { viewModel.stepFrame(by: -1) },
-                            doubleAction: { viewModel.stepFrame(by: -10) },
+                            action: { viewModel.stepFrame(by: -10) },
+                            doubleAction: { viewModel.step(by: -1) },
                             holdAction: { viewModel.beginTransportPlayback(direction: -1) },
                             holdEndAction: viewModel.endTransportPlayback
                         )
@@ -193,8 +259,8 @@ struct PlaybackScreen: View {
 
                         transportButton(
                             systemName: "forward.end.fill",
-                            action: { viewModel.stepFrame(by: 1) },
-                            doubleAction: { viewModel.stepFrame(by: 10) },
+                            action: { viewModel.stepFrame(by: 10) },
+                            doubleAction: { viewModel.step(by: 1) },
                             holdAction: { viewModel.beginTransportPlayback(direction: 1) },
                             holdEndAction: viewModel.endTransportPlayback
                         )
@@ -223,8 +289,8 @@ struct PlaybackScreen: View {
                     HStack(spacing: 12) {
                         transportButton(
                             systemName: "backward.end.fill",
-                            action: { viewModel.stepFrame(by: -1) },
-                            doubleAction: { viewModel.stepFrame(by: -10) },
+                            action: { viewModel.stepFrame(by: -10) },
+                            doubleAction: { viewModel.step(by: -1) },
                             holdAction: { viewModel.beginTransportPlayback(direction: -1) },
                             holdEndAction: viewModel.endTransportPlayback
                         )
@@ -233,8 +299,8 @@ struct PlaybackScreen: View {
 
                         transportButton(
                             systemName: "forward.end.fill",
-                            action: { viewModel.stepFrame(by: 1) },
-                            doubleAction: { viewModel.stepFrame(by: 10) },
+                            action: { viewModel.stepFrame(by: 10) },
+                            doubleAction: { viewModel.step(by: 1) },
                             holdAction: { viewModel.beginTransportPlayback(direction: 1) },
                             holdEndAction: viewModel.endTransportPlayback
                         )
@@ -263,8 +329,9 @@ struct PlaybackScreen: View {
                             }
                     }
                 }
+                .frame(maxWidth: isPad ? 420 : .infinity)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, isPad ? 40 : 24)
             }
         }
     }
@@ -281,7 +348,10 @@ struct PlaybackScreen: View {
         }
         .pickerStyle(.wheel)
         .labelsHidden()
-        .frame(width: isLandscape ? 82 : 76, height: isLandscape ? 120 : 96)
+        .frame(
+            width: isLandscape ? (isPad ? 72 : 82) : (isPad ? 70 : 76),
+            height: isLandscape ? (isPad ? 104 : 120) : (isPad ? 86 : 96)
+        )
         .clipped()
     }
 
@@ -340,8 +410,13 @@ struct PlaybackScreen: View {
         }
     }
 
-    private var isRegularRegularSizeClass: Bool {
-        horizontalSizeClass == .regular && verticalSizeClass == .regular
+    private var isPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+
+    private func updateDeviceOrientation(with orientation: UIDeviceOrientation) {
+        guard orientation.isLandscape || orientation.isPortrait else { return }
+        deviceOrientation = orientation
     }
 }
 

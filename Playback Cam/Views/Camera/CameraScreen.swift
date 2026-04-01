@@ -11,13 +11,10 @@ struct CameraScreen: View {
     @State private var deviceOrientation = UIDevice.current.orientation
     @State private var hasStartedSession = false
     @Environment(\.openURL) private var openURL
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     var body: some View {
         GeometryReader { proxy in
-            let isLandscape = proxy.size.width > proxy.size.height
-            let usesLandscapeControls = isLandscape || isRegularRegularSizeClass
+            let usesLandscapeControls = isPad ? true : (proxy.size.width > proxy.size.height)
 
             ZStack {
                 captureSurface
@@ -93,7 +90,7 @@ struct CameraScreen: View {
         if isLandscape {
             let shutterSize: CGFloat = 98
             let galleryButtonSize: CGFloat = 48
-            let verticalControlSpacing: CGFloat = 14
+            let verticalControlSpacing: CGFloat = isPad ? 38 : 14
             let landscapeControlLaneWidth: CGFloat = 98
             let zoomControlHeight: CGFloat = 46
             let zoomYOffset = -((shutterSize / 2) + (zoomControlHeight / 2) + verticalControlSpacing)
@@ -113,7 +110,7 @@ struct CameraScreen: View {
                 }
                 .frame(width: landscapeControlLaneWidth)
                 .frame(maxHeight: .infinity)
-                .padding(.trailing, -20)
+                .padding(.trailing, isPad ? 24 : -20)
             }
         } else {
             VStack {
@@ -126,7 +123,7 @@ struct CameraScreen: View {
                         galleryButton
                             .rotationEffect(cameraAccessoryRotationAngle)
                             .animation(.spring(response: 0.28, dampingFraction: 0.84), value: cameraAccessoryRotationAngle)
-                            .padding(.leading, 20)
+                            .padding(.leading, isPadLandscapeHeld ? -6 : (isPad ? 6 : 20))
                         Spacer()
                         zoomPicker
                             .rotationEffect(cameraAccessoryRotationAngle)
@@ -134,7 +131,8 @@ struct CameraScreen: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 35)
+                .padding(.horizontal, isPadLandscapeHeld ? 0 : (isPad ? 20 : 35))
+                .padding(.bottom, isPadLandscapeHeld ? 62 : (isPad ? 24 : 0))
             }
         }
     }
@@ -179,16 +177,12 @@ struct CameraScreen: View {
         }
     }
 
-    private var isRegularRegularSizeClass: Bool {
-        horizontalSizeClass == .regular && verticalSizeClass == .regular
-    }
-
     private var galleryPreviewRecording: Recording? {
         pendingGallerySaveRecording ?? lastSavedRecording
     }
 
     private var cameraAccessoryRotationAngle: Angle {
-        guard UIDevice.current.userInterfaceIdiom == .phone else { return .zero }
+        guard !isPad else { return .zero }
 
         switch deviceOrientation {
         case .landscapeLeft:
@@ -198,6 +192,14 @@ struct CameraScreen: View {
         default:
             return .zero
         }
+    }
+
+    private var isPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad
+    }
+
+    private var isPadLandscapeHeld: Bool {
+        isPad && deviceOrientation.isLandscape
     }
 
     private func updateDeviceOrientation(with orientation: UIDeviceOrientation) {

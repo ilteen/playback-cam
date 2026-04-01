@@ -209,6 +209,22 @@ final class PlaybackViewModel: ObservableObject {
         seek(to: nextTime)
     }
 
+    func step(by seconds: Double) {
+        stopTransportPlaybackIfNeeded()
+
+        let nextTime = min(
+            max(0, state.currentTime + seconds),
+            state.duration
+        )
+
+        state.currentTime = nextTime
+        state.isPlaying = false
+
+        guard !isPreviewMode else { return }
+        player.pause()
+        seek(to: nextTime)
+    }
+
     func beginTransportPlayback(direction: Int) {
         guard direction != 0 else { return }
         guard activeTransportDirection == nil else { return }
