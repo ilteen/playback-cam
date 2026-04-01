@@ -170,6 +170,33 @@ struct CameraGalleryThumbnail: View {
     }
 }
 
+struct CameraModeToggleButton: View {
+    let mode: CameraCaptureMode
+    let isDisabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: mode.toggleSymbolName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background {
+                    Circle()
+                        .fill(.black.opacity(0.7))
+                }
+                .overlay {
+                    Circle()
+                        .stroke(.white.opacity(0.16), lineWidth: 1)
+                }
+        }
+        .buttonStyle(CameraShutterPressStyle())
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.72 : 1)
+        .accessibilityLabel(mode.toggleAccessibilityLabel)
+    }
+}
+
 struct CameraShutterButton: View {
     let isRecording: Bool
     let action: () -> Void
@@ -189,6 +216,66 @@ struct CameraShutterButton: View {
             .animation(.easeInOut(duration: 0.1), value: isRecording)
         }
         .buttonStyle(CameraShutterPressStyle())
+    }
+}
+
+struct CameraDelayedPlaybackPicker: View {
+    let options: [DelayedPlaybackDelayOption]
+    let selectedOption: DelayedPlaybackDelayOption
+    let isDisabled: Bool
+    let onSelect: (DelayedPlaybackDelayOption) -> Void
+
+    var body: some View {
+        Picker("Delay", selection: Binding(
+            get: { selectedOption },
+            set: onSelect
+        )) {
+            ForEach(options) { option in
+                Text("\(option.label)s")
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .tag(option)
+            }
+        }
+        .pickerStyle(.wheel)
+        .labelsHidden()
+        .frame(width: 98, height: 110)
+        .clipped()
+        .background {
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .fill(.black.opacity(0.72))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .stroke(.white.opacity(0.14), lineWidth: 1)
+        }
+        .opacity(isDisabled ? 0.72 : 1)
+        .disabled(isDisabled)
+    }
+}
+
+struct CameraDelayedPlaybackLoadingIndicator: View {
+    let selectedDelayOption: DelayedPlaybackDelayOption
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+                .controlSize(.regular)
+                .tint(.white)
+
+            Text("Buffering \(selectedDelayOption.rawValue)s delay")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.black.opacity(0.55))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.white.opacity(0.14), lineWidth: 1)
+        }
     }
 }
 

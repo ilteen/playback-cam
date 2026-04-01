@@ -8,8 +8,15 @@ enum PhotoLibrarySaveResult {
     case failed
 }
 
+enum PhotoLibraryDeleteResult {
+    case deleted
+    case denied
+    case failed
+}
+
 protocol RecordingSaving {
     func save(recording: Recording, playbackRate: PlaybackRateOption) async -> PhotoLibrarySaveResult
+    func delete(recording: Recording) async -> PhotoLibraryDeleteResult
 }
 
 struct PhotoLibraryService: RecordingSaving {
@@ -21,8 +28,12 @@ struct PhotoLibraryService: RecordingSaving {
         }
     }
 
+    private final class AssetIdentifierBox: @unchecked Sendable {
+        var value: String?
+    }
+
     func save(recording: Recording, playbackRate: PlaybackRateOption) async -> PhotoLibrarySaveResult {
-        let authorizationStatus = await requestAuthorization()
+        let authorizationStatus = await requestAuthorization(for: .addOnly)
         guard authorizationStatus == .authorized || authorizationStatus == .limited else {
             return .denied
         }
@@ -31,9 +42,11 @@ struct PhotoLibraryService: RecordingSaving {
             return .failed
         }
 
+        let assetIdentifierBox = AssetIdentifierBox()
         let success = await withCheckedContinuation { continuation in
             PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: exportURL)
+                let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: exportURL)
+                assetIdentifierBox.value = request?.placeholderForCreatedAsset?.localIdentifier
             }, completionHandler: { success, _ in
                 continuation.resume(returning: success)
             })
@@ -48,17 +61,71 @@ struct PhotoLibraryService: RecordingSaving {
             Recording(
                 videoURL: exportURL,
                 createdAt: recording.createdAt,
-                basePlaybackRate: playbackRate.rate
+                basePlaybackRate: playbackRate.rate,
+                photoLibraryAssetIdentifier: assetIdentifierBox.value
             )
         )
     }
 
-    private func requestAuthorization() async -> PHAuthorizationStatus {
+    func delete(recording: Recording) async -> PhotoLibraryDeleteResult {
+        guard let asset = asset(for: recording) else {
+            let authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            if authorizationStatus == .denied || authorizationStatus == .restricted {
+                return .denied
+            }
+            return .failed
+        }
+
+        let result = await withCheckedContinuation { continuation in
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.deleteAssets([asset] as NSArray)
+            }, completionHandler: { success, error in
+                continuation.resume(returning: (success, error))
+            })
+        }
+
+        guard result.0 else {
+            let authorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            if authorizationStatus == .denied || authorizationStatus == .restricted {
+                return .denied
+            }
+            return .failed
+        }
+
+        try? FileManager.default.removeItem(at: recording.videoURL)
+        VideoThumbnailService.removeCachedImage(for: recording.videoURL)
+        return .deleted
+    }
+
+    private func requestAuthorization(for accessLevel: PHAccessLevel) async -> PHAuthorizationStatus {
         await withCheckedContinuation { continuation in
-            PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            PHPhotoLibrary.requestAuthorization(for: accessLevel) { status in
                 continuation.resume(returning: status)
             }
         }
+    }
+
+    private func asset(for recording: Recording) -> PHAsset? {
+        if let identifier = recording.photoLibraryAssetIdentifier {
+            let fetchedAsset = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
+            if let asset = fetchedAsset.firstObject {
+                return asset
+            }
+        }
+
+        let filename = recording.videoURL.lastPathComponent
+        let fetchedVideos = PHAsset.fetchAssets(with: .video, options: nil)
+        var matchedAsset: PHAsset?
+
+        fetchedVideos.enumerateObjects { asset, _, stop in
+            let resources = PHAssetResource.assetResources(for: asset)
+            if resources.contains(where: { $0.originalFilename == filename }) {
+                matchedAsset = asset
+                stop.pointee = true
+            }
+        }
+
+        return matchedAsset
     }
 
     private func exportRetimedVideo(for recording: Recording, playbackRate: PlaybackRateOption) async -> URL? {

@@ -9,6 +9,10 @@ enum VideoThumbnailService {
         cache.object(forKey: videoURL as NSURL)
     }
 
+    static func removeCachedImage(for videoURL: URL) {
+        cache.removeObject(forKey: videoURL as NSURL)
+    }
+
     static func prepareThumbnail(
         for videoURL: URL,
         maximumSize: CGSize = CGSize(width: 192, height: 192)

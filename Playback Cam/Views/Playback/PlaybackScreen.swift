@@ -90,7 +90,15 @@ struct PlaybackScreen: View {
         } else if isLandscape {
             edgeInset = 0
         } else {
-            edgeInset = 10
+            edgeInset = 24
+        }
+
+        let topInset: CGFloat = if isPad {
+            22
+        } else if isLandscape {
+            10
+        } else {
+            edgeInset
         }
 
         return VStack {
@@ -139,12 +147,13 @@ struct PlaybackScreen: View {
                     }
                     .disabled(viewModel.isSaving)
                 }
-            }
-            .padding(.top, isPad ? 22 : 10)
-            .padding(.horizontal, edgeInset)
-
-            Spacer(minLength: 0)
         }
+        .padding(.top, topInset)
+        .padding(.horizontal, edgeInset)
+
+        Spacer(minLength: 0)
+        }
+        .ignoresSafeArea(edges: (!isPad && !isLandscape) ? .top : [])
     }
 
     private func scrubOverlay(isLandscape: Bool, availableWidth: CGFloat) -> some View {

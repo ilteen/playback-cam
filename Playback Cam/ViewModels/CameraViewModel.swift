@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import Foundation
+import UIKit
 
 @MainActor
 final class CameraViewModel: ObservableObject {
@@ -36,6 +37,10 @@ final class CameraViewModel: ObservableObject {
         state.availableZoomOptions.contains(.wide) && state.availableZoomOptions.contains(.ultraWide)
     }
 
+    var showsDelayedPlaybackLoadingIndicator: Bool {
+        state.captureMode == .delayedPlayback && !state.isDelayedPlaybackReady
+    }
+
     func onAppear() {
         service.startSessionIfNeeded()
     }
@@ -50,6 +55,11 @@ final class CameraViewModel: ObservableObject {
         service.attachPreview(to: previewLayer)
     }
 
+    func attachDelayedPlaybackView(_ imageView: UIImageView) {
+        guard !isPreviewMode else { return }
+        service.attachDelayedPlayback(to: imageView)
+    }
+
     func dismissPermissionAlert() {
         service.dismissPermissionAlert()
     }
@@ -58,7 +68,18 @@ final class CameraViewModel: ObservableObject {
         service.selectZoomOption(option)
     }
 
+    func toggleCaptureMode() {
+        let nextMode: CameraCaptureMode = state.captureMode == .slowMo ? .delayedPlayback : .slowMo
+        service.selectCaptureMode(nextMode)
+    }
+
+    func selectDelayedPlaybackOption(_ option: DelayedPlaybackDelayOption) {
+        service.selectDelayedPlaybackOption(option)
+    }
+
     func captureButtonTapped() {
+        guard state.captureMode == .slowMo else { return }
+
         if state.isRecording {
             stopRecording()
         } else {
@@ -84,7 +105,10 @@ extension CameraViewModel {
     static func preview(
         isRecording: Bool = false,
         errorMessage: String? = nil,
-        selectedZoomOption: CameraZoomOption = .wide
+        selectedZoomOption: CameraZoomOption = .wide,
+        captureMode: CameraCaptureMode = .slowMo,
+        selectedDelayOption: DelayedPlaybackDelayOption = .two,
+        isDelayedPlaybackReady: Bool = false
     ) -> CameraViewModel {
         let service = PreviewCameraSessionService(
             state: CameraSessionState(
@@ -92,7 +116,11 @@ extension CameraViewModel {
                 errorMessage: errorMessage,
                 availableZoomOptions: [.ultraWide, .wide],
                 selectedZoomOption: selectedZoomOption,
-                requiresPermissionAlert: false
+                requiresPermissionAlert: false,
+                captureMode: captureMode,
+                availableDelayOptions: DelayedPlaybackDelayOption.allCases,
+                selectedDelayOption: selectedDelayOption,
+                isDelayedPlaybackReady: isDelayedPlaybackReady
             )
         )
         return CameraViewModel(service: service)

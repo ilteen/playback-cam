@@ -44,6 +44,24 @@ final class AppViewModel: ObservableObject {
         galleryStartIndex = nil
     }
 
+    func deleteSavedRecording(_ recording: Recording) async -> PhotoLibraryDeleteResult {
+        let result = await recordingSaver.delete(recording: recording)
+
+        guard case .deleted = result else {
+            return result
+        }
+
+        sessionSavedRecordings.removeAll { $0.id == recording.id }
+
+        if sessionSavedRecordings.isEmpty {
+            galleryStartIndex = nil
+        } else if let galleryStartIndex {
+            self.galleryStartIndex = min(galleryStartIndex, sessionSavedRecordings.count - 1)
+        }
+
+        return result
+    }
+
     func clearPendingSaveTransition() {
         pendingSaveTransitionRecording = nil
     }

@@ -14,7 +14,7 @@ struct CameraScreen: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let usesLandscapeControls = isPad ? true : (proxy.size.width > proxy.size.height)
+            let usesLandscapeControls = isPad
 
             ZStack {
                 captureSurface
@@ -23,18 +23,15 @@ struct CameraScreen: View {
                 CameraEdgeTreatment()
                     .ignoresSafeArea()
 
-                if let errorMessage = viewModel.state.errorMessage {
-                    VStack {
-                        CameraMessagePill(
-                            icon: "exclamationmark.triangle.fill",
-                            text: errorMessage
-                        )
-                        .padding(.top, 14)
-
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 16)
+                if viewModel.showsDelayedPlaybackLoadingIndicator {
+                    CameraDelayedPlaybackLoadingIndicator(
+                        selectedDelayOption: viewModel.state.selectedDelayOption
+                    )
+                    .rotationEffect(delayInterfaceRotationAngle)
+                    .animation(.spring(response: 0.28, dampingFraction: 0.84), value: delayInterfaceRotationAngle)
                 }
+
+                topOverlay
 
                 controlsOverlay(isLandscape: usesLandscapeControls)
             }
@@ -69,7 +66,7 @@ struct CameraScreen: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Allow camera access to record slo-mo videos.")
+            Text("Allow camera access to record video.")
         }
     }
 
@@ -80,9 +77,42 @@ struct CameraScreen: View {
         } else {
             CameraPreviewContainer(
                 session: viewModel.session,
-                onPreviewLayerReady: viewModel.attachPreviewLayer
+                showsDelayedPlayback: viewModel.state.captureMode == .delayedPlayback && viewModel.state.isDelayedPlaybackReady,
+                onPreviewLayerReady: viewModel.attachPreviewLayer,
+                onDelayedPlaybackViewReady: viewModel.attachDelayedPlaybackView
             )
         }
+    }
+
+    private var topOverlay: some View {
+        let horizontalInset: CGFloat = isPad ? 24 : 24
+        let topInset: CGFloat = isPad ? 22 : horizontalInset
+
+        return VStack(spacing: 12) {
+            HStack {
+                if !isPad {
+                    Spacer(minLength: 0)
+                    modeToggleButton
+                        .rotationEffect(cameraAccessoryRotationAngle)
+                        .animation(.spring(response: 0.28, dampingFraction: 0.84), value: cameraAccessoryRotationAngle)
+                }
+            }
+
+            if let errorMessage = viewModel.state.errorMessage {
+                HStack {
+                    CameraMessagePill(
+                        icon: "exclamationmark.triangle.fill",
+                        text: errorMessage
+                    )
+                    Spacer(minLength: 0)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, topInset)
+        .padding(.horizontal, horizontalInset)
+        .ignoresSafeArea(edges: isPad ? [] : .top)
     }
 
     @ViewBuilder
@@ -93,17 +123,28 @@ struct CameraScreen: View {
             let verticalControlSpacing: CGFloat = isPad ? 38 : 14
             let landscapeControlLaneWidth: CGFloat = 98
             let zoomControlHeight: CGFloat = 46
+            let modeButtonSize: CGFloat = 48
             let zoomYOffset = -((shutterSize / 2) + (zoomControlHeight / 2) + verticalControlSpacing)
+            let modeToggleYOffset: CGFloat = if viewModel.showsZoomPicker {
+                zoomYOffset - ((zoomControlHeight / 2) + (modeButtonSize / 2) + verticalControlSpacing)
+            } else {
+                -((shutterSize / 2) + (modeButtonSize / 2) + verticalControlSpacing)
+            }
             let galleryYOffset = (shutterSize / 2) + (galleryButtonSize / 2) + verticalControlSpacing
 
             HStack {
                 Spacer(minLength: 0)
 
                 ZStack {
-                    captureButton
+                    centerControl
 
                     zoomPicker
                         .offset(y: zoomYOffset)
+
+                    if isPad {
+                        modeToggleButton
+                            .offset(y: modeToggleYOffset)
+                    }
 
                     galleryButton
                         .offset(y: galleryYOffset)
@@ -117,7 +158,7 @@ struct CameraScreen: View {
                 Spacer(minLength: 0)
 
                 ZStack {
-                    captureButton
+                    centerControl
 
                     HStack {
                         galleryButton
@@ -137,12 +178,33 @@ struct CameraScreen: View {
         }
     }
 
+    @ViewBuilder
+    private var centerControl: some View {
+        if viewModel.state.captureMode == .slowMo {
+            captureButton
+        } else {
+            delayPicker
+        }
+    }
+
     private var captureButton: some View {
         CameraShutterButton(
             isRecording: viewModel.state.isRecording && !viewModel.isStopping,
             action: viewModel.captureButtonTapped
         )
         .disabled(viewModel.isStopping || viewModel.shouldShowPermissionAlert)
+    }
+
+    private var delayPicker: some View {
+        CameraDelayedPlaybackPicker(
+            options: viewModel.state.availableDelayOptions,
+            selectedOption: viewModel.state.selectedDelayOption,
+            isDisabled: viewModel.isStopping || viewModel.shouldShowPermissionAlert,
+            onSelect: viewModel.selectDelayedPlaybackOption
+        )
+        .rotationEffect(delayInterfaceRotationAngle)
+        .animation(.spring(response: 0.28, dampingFraction: 0.84), value: delayInterfaceRotationAngle)
+        .frame(width: isPhoneLandscape ? 110 : nil, height: isPhoneLandscape ? 98 : nil)
     }
 
     @ViewBuilder
@@ -155,6 +217,14 @@ struct CameraScreen: View {
                 onSelect: viewModel.selectZoomOption
             )
         }
+    }
+
+    private var modeToggleButton: some View {
+        CameraModeToggleButton(
+            mode: viewModel.state.captureMode,
+            isDisabled: viewModel.state.isRecording || viewModel.isStopping || viewModel.shouldShowPermissionAlert,
+            action: viewModel.toggleCaptureMode
+        )
     }
 
     @ViewBuilder
@@ -200,6 +270,14 @@ struct CameraScreen: View {
 
     private var isPadLandscapeHeld: Bool {
         isPad && deviceOrientation.isLandscape
+    }
+
+    private var isPhoneLandscape: Bool {
+        !isPad && deviceOrientation.isLandscape
+    }
+
+    private var delayInterfaceRotationAngle: Angle {
+        isPhoneLandscape ? cameraAccessoryRotationAngle : .zero
     }
 
     private func updateDeviceOrientation(with orientation: UIDeviceOrientation) {
@@ -263,6 +341,27 @@ struct CameraScreen_Previews: PreviewProvider {
             .preferredColorScheme(.dark)
             .previewDisplayName("Camera Landscape")
             .previewInterfaceOrientation(.landscapeRight)
+
+            CameraScreen(
+                viewModel: .preview(
+                    isRecording: false,
+                    errorMessage: nil,
+                    selectedZoomOption: .wide,
+                    captureMode: .delayedPlayback,
+                    selectedDelayOption: .five,
+                    isDelayedPlaybackReady: false
+                ),
+                lastSavedRecording: Recording(
+                    videoURL: URL(fileURLWithPath: "/dev/null"),
+                    createdAt: .now
+                ),
+                pendingGallerySaveRecording: nil,
+                onOpenGallery: {},
+                onGalleryThumbnailFrameChange: { _ in },
+                delaysSessionStart: false
+            )
+            .preferredColorScheme(.dark)
+            .previewDisplayName("Delayed Playback")
         }
     }
 }

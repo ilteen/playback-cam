@@ -15,6 +15,7 @@ struct AppView: View {
                         initialIndex: viewModel.sessionSavedRecordings.count,
                         playbackSettings: viewModel.playbackSettings,
                         reviewViewModel: playbackViewModel,
+                        onDeleteRecording: viewModel.deleteSavedRecording,
                         onClose: viewModel.discardActivePlayback
                     )
                     .transition(.opacity.animation(.easeInOut(duration: 0.18)))
@@ -23,6 +24,7 @@ struct AppView: View {
                         recordings: viewModel.sessionSavedRecordings,
                         initialIndex: galleryStartIndex,
                         playbackSettings: viewModel.playbackSettings,
+                        onDeleteRecording: viewModel.deleteSavedRecording,
                         onClose: viewModel.closeGallery
                     )
                     .transition(.opacity.animation(.easeInOut(duration: 0.18)))
@@ -48,7 +50,7 @@ struct AppView: View {
         }
         .coordinateSpace(name: "app-root")
         .preferredColorScheme(.dark)
-        .statusBar(hidden: !usesPlaybackOrientation)
+        .statusBar(hidden: statusBarHidden)
         .onAppear {
             updateOrientationPolicy()
         }
@@ -84,6 +86,10 @@ struct AppView: View {
 
     private var usesPlaybackOrientation: Bool {
         viewModel.playbackViewModel != nil || viewModel.galleryStartIndex != nil
+    }
+
+    private var statusBarHidden: Bool {
+        UIDevice.current.userInterfaceIdiom == .phone || !usesPlaybackOrientation
     }
 
     private var reviewPlaybackID: UUID? {

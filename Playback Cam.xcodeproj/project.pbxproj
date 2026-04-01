@@ -258,6 +258,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Playback Cam needs camera access to record slo-mo study videos.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Playback Cam saves recorded slo-mo clips to your Photo Library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Playback Cam needs Photo Library access to manage saved slo-mo clips, including deleting them.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -293,6 +294,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Playback Cam needs camera access to record slo-mo study videos.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Playback Cam saves recorded slo-mo clips to your Photo Library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Playback Cam needs Photo Library access to manage saved slo-mo clips, including deleting them.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

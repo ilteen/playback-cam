@@ -1,4 +1,5 @@
 import AVFoundation
+import UIKit
 
 @MainActor
 final class PreviewCameraSessionService: CameraSessionControlling {
@@ -18,6 +19,8 @@ final class PreviewCameraSessionService: CameraSessionControlling {
     }
 
     func attachPreview(to previewLayer: AVCaptureVideoPreviewLayer) {}
+
+    func attachDelayedPlayback(to imageView: UIImageView) {}
 
     func detachPreview() {}
 
@@ -39,6 +42,18 @@ final class PreviewCameraSessionService: CameraSessionControlling {
     func selectZoomOption(_ option: CameraZoomOption) {
         guard state.availableZoomOptions.contains(option) else { return }
         state.selectedZoomOption = option
+    }
+
+    func selectCaptureMode(_ mode: CameraCaptureMode) {
+        state.captureMode = mode
+        state.isDelayedPlaybackReady = mode == .slowMo
+    }
+
+    func selectDelayedPlaybackOption(_ option: DelayedPlaybackDelayOption) {
+        state.selectedDelayOption = option
+        if state.captureMode == .delayedPlayback {
+            state.isDelayedPlaybackReady = false
+        }
     }
 
     func dismissPermissionAlert() {
