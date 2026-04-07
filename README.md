@@ -26,3 +26,12 @@ The app requests only the permissions it needs:
 - `Photo Library (Read/Write)`: Required only when deleting saved clips from Photos through the in-app gallery
 
 If camera access is denied, the app shows a prompt that links to iOS Settings.
+
+## Screenshots
+
+### iOS
+<p float="left">
+  <img src="/Resources/Screenshots/ios-slowmo.png" width="250" />
+  <img src="/Resources/Screenshots/ios-delayed.png" width="250" />
+  <img src="/Resources/Screenshots/ios-playback.png" width="250" />
+</p>
