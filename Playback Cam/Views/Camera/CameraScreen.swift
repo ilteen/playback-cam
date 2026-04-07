@@ -170,6 +170,7 @@ struct CameraScreen: View {
                             .rotationEffect(cameraAccessoryRotationAngle)
                             .animation(.spring(response: 0.28, dampingFraction: 0.84), value: cameraAccessoryRotationAngle)
                     }
+                    .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, isPadLandscapeHeld ? 0 : (isPad ? 20 : 35))
