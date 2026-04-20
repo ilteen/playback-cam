@@ -98,7 +98,7 @@ struct CameraGalleryButton: View {
                 showsProgress: showsProgress
             )
         }
-        .buttonStyle(CameraShutterPressStyle())
+        .buttonStyle(CameraPressStyle())
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.72 : 1)
     }
@@ -190,7 +190,7 @@ struct CameraModeToggleButton: View {
                         .stroke(.white.opacity(0.16), lineWidth: 1)
                 }
         }
-        .buttonStyle(CameraShutterPressStyle())
+        .buttonStyle(CameraPressStyle())
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.72 : 1)
         .accessibilityLabel(mode.toggleAccessibilityLabel)
@@ -200,6 +200,7 @@ struct CameraModeToggleButton: View {
 struct CameraShutterButton: View {
     let isRecording: Bool
     let action: () -> Void
+    @GestureState private var isPressed = false
 
     var body: some View {
         Button(action: action) {
@@ -210,12 +211,20 @@ struct CameraShutterButton: View {
                 RoundedRectangle(cornerRadius: isRecording ? 6 : 31, style: .continuous)
                     .fill(.red)
                     .frame(width: isRecording ? 30 : 56, height: isRecording ? 30 : 56)
+                    .scaleEffect(isPressed ? 0.94 : 1)
+                    .animation(.easeInOut(duration: 0.12), value: isPressed)
             }
             .frame(width: 98, height: 98)
             .shadow(color: .black.opacity(0.24), radius: 10, y: 6)
             .animation(.easeInOut(duration: 0.1), value: isRecording)
         }
-        .buttonStyle(CameraShutterPressStyle())
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .updating($isPressed) { _, state, _ in
+                    state = true
+                }
+        )
     }
 }
 
@@ -305,6 +314,12 @@ private struct CameraSloMoShutterRing: View {
 }
 
 struct CameraShutterPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+    }
+}
+
+struct CameraPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
