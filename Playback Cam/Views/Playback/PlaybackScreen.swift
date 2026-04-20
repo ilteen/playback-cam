@@ -473,7 +473,12 @@ struct PlaybackScreen: View {
     private var targetDrawingToolsLift: CGFloat {
         guard viewModel.isDrawingModeEnabled else { return 0 }
         guard !isPad else { return 0 }
-        return isPad ? 138 : 126
+
+        if isPhoneLandscape {
+            return 92
+        }
+
+        return 126
     }
 
     private func drawingToolsOverlay(isLandscape: Bool) -> some View {
@@ -553,6 +558,9 @@ struct PlaybackScreen: View {
     private func updateDeviceOrientation(with orientation: UIDeviceOrientation) {
         guard orientation.isLandscape || orientation.isPortrait else { return }
         deviceOrientation = orientation
+
+        guard viewModel.isDrawingModeEnabled else { return }
+        animateBottomChromeLift(to: targetDrawingToolsLift)
     }
 
     private func drawingHistoryControls(isLandscape: Bool) -> some View {
@@ -610,11 +618,15 @@ struct PlaybackScreen: View {
     }
 
     private func scrubChromeOffset(isLandscape: Bool) -> CGFloat {
-        if isPad || isLandscape {
+        if isPad {
             return 0
         }
 
         return -bottomChromeLift
+    }
+
+    private var isPhoneLandscape: Bool {
+        !isPad && deviceOrientation.isLandscape
     }
 
     private func toastChromeOffset(isLandscape: Bool) -> CGFloat {
