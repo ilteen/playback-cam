@@ -10,6 +10,10 @@ struct PlaybackScreen: View {
     @State private var deviceOrientation = UIDevice.current.orientation
     @State private var bottomChromeLift: CGFloat = 0
     @State private var bottomChromeAnimationTask: Task<Void, Never>?
+    @State private var undoRequestToken = 0
+    @State private var redoRequestToken = 0
+    @State private var canUndoDrawing = false
+    @State private var canRedoDrawing = false
 
     init(
         viewModel: PlaybackViewModel,
@@ -101,7 +105,15 @@ struct PlaybackScreen: View {
         PlaybackDrawingCanvas(
             drawing: viewModel.drawing,
             isDrawingEnabled: viewModel.isDrawingModeEnabled,
+            undoRequestToken: undoRequestToken,
+            redoRequestToken: redoRequestToken,
             onDrawingChanged: viewModel.updateDrawing,
+            onUndoRedoAvailabilityChanged: { canUndo, canRedo in
+                DispatchQueue.main.async {
+                    canUndoDrawing = canUndo
+                    canRedoDrawing = canRedo
+                }
+            },
             onToolPickerHeightChanged: { _ in }
         )
         .ignoresSafeArea()
@@ -128,29 +140,10 @@ struct PlaybackScreen: View {
         }
 
         return VStack {
-            HStack {
-                Button(action: discardRecording) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 50, height: 50)
-                        .background {
-                            Circle()
-                                .fill(.black.opacity(0.7))
-                        }
-                        .overlay {
-                            Circle()
-                                .stroke(.white.opacity(0.14), lineWidth: 1)
-                        }
-                }
-                .buttonStyle(PlaybackPressStyle())
-
-                Spacer(minLength: 0)
-
-                if viewModel.showsSaveButton {
-                    Button(action: saveRecording) {
-                        Image(systemName: "square.and.arrow.down")
-                            .padding(.bottom, 5)
+            ZStack(alignment: .top) {
+                HStack {
+                    Button(action: discardRecording) {
+                        Image(systemName: "xmark")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 50, height: 50)
@@ -164,18 +157,43 @@ struct PlaybackScreen: View {
                             }
                     }
                     .buttonStyle(PlaybackPressStyle())
-                    .opacity(viewModel.isSaving ? 0.42 : 1)
-                    .overlay {
-                        if viewModel.isSaving {
-                            ProgressView()
-                                .tint(.white)
+
+                    Spacer(minLength: 0)
+
+                    if viewModel.showsSaveButton {
+                        Button(action: saveRecording) {
+                            Image(systemName: "square.and.arrow.down")
+                                .padding(.bottom, 5)
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 50, height: 50)
+                                .background {
+                                    Circle()
+                                        .fill(.black.opacity(0.7))
+                                }
+                                .overlay {
+                                    Circle()
+                                        .stroke(.white.opacity(0.14), lineWidth: 1)
+                                }
                         }
+                        .buttonStyle(PlaybackPressStyle())
+                        .opacity(viewModel.isSaving ? 0.42 : 1)
+                        .overlay {
+                            if viewModel.isSaving {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                        }
+                        .disabled(viewModel.isSaving)
                     }
-                    .disabled(viewModel.isSaving)
+                }
+                .padding(.top, topInset)
+                .padding(.horizontal, edgeInset)
+
+                if viewModel.isDrawingModeEnabled {
+                    drawingHistoryControls(isLandscape: isLandscape)
                 }
             }
-            .padding(.top, topInset)
-            .padding(.horizontal, edgeInset)
 
             Spacer(minLength: 0)
         }
@@ -200,7 +218,7 @@ struct PlaybackScreen: View {
             .padding(.vertical, 12)
             .padding(.horizontal, isLandscape ? (isPad ? 0 : 108) : 12)
             .padding(.bottom, isPad ? 24 : (isLandscape ? 12 : 100))
-            .offset(y: isLandscape ? 0 : -bottomChromeLift)
+            .offset(y: scrubChromeOffset(isLandscape: isLandscape))
         }
     }
 
@@ -368,7 +386,7 @@ struct PlaybackScreen: View {
                 .frame(maxWidth: isPad ? 420 : .infinity)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, isPad ? 40 : 24)
-                .offset(y: -bottomChromeLift)
+                .offset(y: controlsChromeOffset(isLandscape: false))
             }
         }
     }
@@ -444,7 +462,7 @@ struct PlaybackScreen: View {
                         .stroke(.white.opacity(0.14), lineWidth: 1)
                 }
                 .padding(.bottom, isLandscape ? 28 : 150)
-                .offset(y: isLandscape ? 0 : -bottomChromeLift)
+                .offset(y: toastChromeOffset(isLandscape: isLandscape))
         }
     }
 
@@ -454,6 +472,7 @@ struct PlaybackScreen: View {
 
     private var targetDrawingToolsLift: CGFloat {
         guard viewModel.isDrawingModeEnabled else { return 0 }
+        guard !isPad else { return 0 }
         return isPad ? 138 : 126
     }
 
@@ -534,6 +553,76 @@ struct PlaybackScreen: View {
     private func updateDeviceOrientation(with orientation: UIDeviceOrientation) {
         guard orientation.isLandscape || orientation.isPortrait else { return }
         deviceOrientation = orientation
+    }
+
+    private func drawingHistoryControls(isLandscape: Bool) -> some View {
+        HStack(spacing: 14) {
+            drawingHistoryButton(
+                systemName: "arrow.uturn.backward.circle",
+                isEnabled: canUndoDrawing,
+                action: requestUndoDrawing
+            )
+
+            drawingHistoryButton(
+                systemName: "arrow.uturn.forward.circle",
+                isEnabled: canRedoDrawing,
+                action: requestRedoDrawing
+            )
+        }
+        .padding(.top, drawingHistoryTopInset(isLandscape: isLandscape))
+    }
+
+    private func drawingHistoryButton(systemName: String, isEnabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(.yellow)
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.38)
+        .disabled(!isEnabled)
+        .accessibilityLabel(Text(systemName == "arrow.uturn.backward.circle" ? String(localized: "Undo drawing") : String(localized: "Redo drawing")))
+    }
+
+    private func drawingHistoryTopInset(isLandscape: Bool) -> CGFloat {
+        if isPad {
+            return 22
+        }
+
+        return isLandscape ? 18 : 58
+    }
+
+    private func requestUndoDrawing() {
+        undoRequestToken += 1
+    }
+
+    private func requestRedoDrawing() {
+        redoRequestToken += 1
+    }
+
+    private func controlsChromeOffset(isLandscape: Bool) -> CGFloat {
+        if isPad || isLandscape {
+            return 0
+        }
+
+        return -bottomChromeLift
+    }
+
+    private func scrubChromeOffset(isLandscape: Bool) -> CGFloat {
+        if isPad || isLandscape {
+            return 0
+        }
+
+        return -bottomChromeLift
+    }
+
+    private func toastChromeOffset(isLandscape: Bool) -> CGFloat {
+        if isPad || isLandscape {
+            return 0
+        }
+
+        return -bottomChromeLift
     }
 
     private func animateBottomChromeLift(to target: CGFloat) {

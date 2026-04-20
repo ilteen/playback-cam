@@ -2,8 +2,6 @@ import PencilKit
 import SwiftUI
 import UIKit
 
-//TODO: implement undo/redo
-
 struct PlaybackEdgeTreatment: View {
     var body: some View {
         VStack(spacing: 0) {
@@ -145,6 +143,9 @@ final class PlaybackFloatingDrawingToggleAnchorView: UIView {
     private weak var installedWindow: UIWindow?
     private var action: (() -> Void)?
     private var isInstalled = false
+    private var currentIsActive = false
+    private var currentHorizontalInset: CGFloat = 0
+    private var currentBottomInset: CGFloat = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -186,6 +187,9 @@ final class PlaybackFloatingDrawingToggleAnchorView: UIView {
         action: @escaping () -> Void
     ) {
         self.action = action
+        currentIsActive = isActive
+        currentHorizontalInset = horizontalInset
+        currentBottomInset = bottomInset
         installFloatingButtonIfNeeded()
         updateAppearance(isActive: isActive)
         leadingConstraint?.constant = horizontalInset
@@ -225,6 +229,11 @@ final class PlaybackFloatingDrawingToggleAnchorView: UIView {
             leadingConstraint,
             bottomConstraint
         ].compactMap { $0 })
+
+        updateAppearance(isActive: currentIsActive)
+        leadingConstraint?.constant = currentHorizontalInset
+        bottomConstraint?.constant = -currentBottomInset
+        window.layoutIfNeeded()
     }
 
     private func updateAppearance(isActive: Bool) {
@@ -246,12 +255,16 @@ final class PlaybackFloatingDrawingToggleAnchorView: UIView {
 struct PlaybackDrawingCanvas: UIViewRepresentable {
     let drawing: PKDrawing
     let isDrawingEnabled: Bool
+    let undoRequestToken: Int
+    let redoRequestToken: Int
     let onDrawingChanged: (PKDrawing) -> Void
+    let onUndoRedoAvailabilityChanged: (Bool, Bool) -> Void
     let onToolPickerHeightChanged: (CGFloat) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             onDrawingChanged: onDrawingChanged,
+            onUndoRedoAvailabilityChanged: onUndoRedoAvailabilityChanged,
             onToolPickerHeightChanged: onToolPickerHeightChanged
         )
     }
@@ -278,35 +291,51 @@ struct PlaybackDrawingCanvas: UIViewRepresentable {
             view.canvasView.drawing = drawing
         }
 
+        view.onUndoRedoAvailabilityChanged = onUndoRedoAvailabilityChanged
         view.onToolPickerHeightChanged = onToolPickerHeightChanged
         view.canvasView.isUserInteractionEnabled = isDrawingEnabled
         view.setToolPickerVisible(isDrawingEnabled)
+        view.handleUndoRedoRequests(undoToken: undoRequestToken, redoToken: redoRequestToken)
+        view.reportUndoRedoAvailability()
     }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         private let onDrawingChanged: (PKDrawing) -> Void
+        private let onUndoRedoAvailabilityChanged: (Bool, Bool) -> Void
         let onToolPickerHeightChanged: (CGFloat) -> Void
 
         init(
             onDrawingChanged: @escaping (PKDrawing) -> Void,
+            onUndoRedoAvailabilityChanged: @escaping (Bool, Bool) -> Void,
             onToolPickerHeightChanged: @escaping (CGFloat) -> Void
         ) {
             self.onDrawingChanged = onDrawingChanged
+            self.onUndoRedoAvailabilityChanged = onUndoRedoAvailabilityChanged
             self.onToolPickerHeightChanged = onToolPickerHeightChanged
         }
 
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
             onDrawingChanged(canvasView.drawing)
+            let undoManager = canvasView.undoManager
+            onUndoRedoAvailabilityChanged(
+                undoManager?.canUndo ?? false,
+                undoManager?.canRedo ?? false
+            )
         }
     }
 }
 
 final class PlaybackDrawingCanvasContainerView: UIView, PKToolPickerObserver {
     let canvasView = PKCanvasView()
+    var onUndoRedoAvailabilityChanged: ((Bool, Bool) -> Void)?
     var onToolPickerHeightChanged: ((CGFloat) -> Void)?
 
     private var toolPicker: PKToolPicker?
     private var wantsToolPickerVisible = false
+    private var lastUndoToken = 0
+    private var lastRedoToken = 0
+    private weak var observedUndoManager: UndoManager?
+    private var undoObservers: [NSObjectProtocol] = []
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -340,12 +369,32 @@ final class PlaybackDrawingCanvasContainerView: UIView, PKToolPickerObserver {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        syncUndoManagerObservation()
         updateToolPickerVisibility()
     }
 
     func setToolPickerVisible(_ isVisible: Bool) {
         wantsToolPickerVisible = isVisible
+        syncUndoManagerObservation()
         updateToolPickerVisibility()
+    }
+
+    func handleUndoRedoRequests(undoToken: Int, redoToken: Int) {
+        if undoToken != lastUndoToken {
+            lastUndoToken = undoToken
+            canvasView.undoManager?.undo()
+            DispatchQueue.main.async { [weak self] in
+                self?.reportUndoRedoAvailability()
+            }
+        }
+
+        if redoToken != lastRedoToken {
+            lastRedoToken = redoToken
+            canvasView.undoManager?.redo()
+            DispatchQueue.main.async { [weak self] in
+                self?.reportUndoRedoAvailability()
+            }
+        }
     }
 
     private func updateToolPickerVisibility() {
@@ -363,7 +412,9 @@ final class PlaybackDrawingCanvasContainerView: UIView, PKToolPickerObserver {
             if !canvasView.isFirstResponder {
                 canvasView.becomeFirstResponder()
             }
+            syncUndoManagerObservation()
             reportToolPickerHeight()
+            reportUndoRedoAvailability()
         } else {
             toolPicker?.setVisible(false, forFirstResponder: canvasView)
             toolPicker?.removeObserver(canvasView)
@@ -372,6 +423,8 @@ final class PlaybackDrawingCanvasContainerView: UIView, PKToolPickerObserver {
                 canvasView.resignFirstResponder()
             }
             toolPicker = nil
+            syncUndoManagerObservation()
+            reportUndoRedoAvailability()
             onToolPickerHeightChanged?(0)
         }
     }
@@ -392,6 +445,50 @@ final class PlaybackDrawingCanvasContainerView: UIView, PKToolPickerObserver {
 
         let obscuredFrame = toolPicker.frameObscured(in: self)
         onToolPickerHeightChanged?(max(0, obscuredFrame.height))
+    }
+
+    func reportUndoRedoAvailability() {
+        let undoManager = canvasView.undoManager
+        onUndoRedoAvailabilityChanged?(undoManager?.canUndo ?? false, undoManager?.canRedo ?? false)
+    }
+
+    private func syncUndoManagerObservation() {
+        let undoManager = canvasView.undoManager
+        guard observedUndoManager !== undoManager else { return }
+
+        removeUndoObservers()
+        observedUndoManager = undoManager
+
+        guard let undoManager else { return }
+
+        let notificationCenter = NotificationCenter.default
+        let names: [NSNotification.Name] = [
+            .NSUndoManagerCheckpoint,
+            .NSUndoManagerDidUndoChange,
+            .NSUndoManagerDidRedoChange,
+            .NSUndoManagerDidCloseUndoGroup
+        ]
+
+        undoObservers = names.map { name in
+            notificationCenter.addObserver(
+                forName: name,
+                object: undoManager,
+                queue: .main
+            ) { [weak self] _ in
+                self?.reportUndoRedoAvailability()
+            }
+        }
+    }
+
+    private func removeUndoObservers() {
+        let notificationCenter = NotificationCenter.default
+        undoObservers.forEach(notificationCenter.removeObserver)
+        undoObservers.removeAll()
+        observedUndoManager = nil
+    }
+
+    deinit {
+        removeUndoObservers()
     }
 }
 

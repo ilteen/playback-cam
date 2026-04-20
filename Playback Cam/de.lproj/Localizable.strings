@@ -24,3 +24,5 @@
 "%d-second delay" = "%d Sekunden Verzögerung";
 "Buffering %d s delay" = "%d Sek. Verzögerung wird gepuffert";
 "Drawing tools" = "Zeichenwerkzeuge";
+"Undo drawing" = "Zeichnung rückgängig";
+"Redo drawing" = "Zeichnung wiederholen";
