@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import Foundation
+import PencilKit
 
 @MainActor
 final class PlaybackViewModel: ObservableObject {
@@ -23,6 +24,8 @@ final class PlaybackViewModel: ObservableObject {
     @Published private(set) var state: PlaybackState
     @Published private(set) var saveMessage: String?
     @Published private(set) var isSaving = false
+    @Published private(set) var drawing = PKDrawing()
+    @Published private(set) var isDrawingModeEnabled = false
 
     let player: AVPlayer
     let isPreviewMode: Bool
@@ -118,6 +121,10 @@ final class PlaybackViewModel: ObservableObject {
         return false
     }
 
+    var hasDrawing: Bool {
+        !drawing.strokes.isEmpty
+    }
+
     func onAppear() {
         guard !isPreviewMode else { return }
         configurePlayer()
@@ -130,6 +137,24 @@ final class PlaybackViewModel: ObservableObject {
 
     func selectPlaybackRate(_ option: PlaybackRateOption) {
         playbackSettings.selectedRate = option
+    }
+
+    func toggleDrawingMode() {
+        isDrawingModeEnabled.toggle()
+    }
+
+    func setDrawingModeEnabled(_ isEnabled: Bool) {
+        isDrawingModeEnabled = isEnabled
+    }
+
+    func updateDrawing(_ drawing: PKDrawing) {
+        guard drawing.dataRepresentation() != self.drawing.dataRepresentation() else { return }
+        self.drawing = drawing
+    }
+
+    func clearDrawing() {
+        guard hasDrawing else { return }
+        drawing = PKDrawing()
     }
 
     func togglePlayback() {

@@ -1,4 +1,8 @@
+import PencilKit
 import SwiftUI
+import UIKit
+
+//TODO: implement undo/redo
 
 struct PlaybackEdgeTreatment: View {
     var body: some View {
@@ -71,6 +75,323 @@ struct PlaybackCircleButton: View {
                 }
         }
         .buttonStyle(PlaybackPressStyle())
+    }
+}
+
+struct PlaybackDrawingToggleButton: View {
+    let isActive: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "pencil.tip.crop.circle")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 50, height: 50)
+                .background {
+                    Circle()
+                        .fill(isActive ? .blue.opacity(0.96) : .black.opacity(0.7))
+                }
+                .overlay {
+                    Circle()
+                        .stroke(.white.opacity(0.14), lineWidth: 1)
+                }
+        }
+        .buttonStyle(PlaybackPressStyle())
+        .accessibilityLabel(String(localized: "Drawing tools"))
+    }
+}
+
+struct PlaybackFloatingDrawingToggleOverlay: UIViewRepresentable, Animatable {
+    let isActive: Bool
+    let horizontalInset: CGFloat
+    var bottomInset: CGFloat
+    let action: () -> Void
+
+    var animatableData: CGFloat {
+        get { bottomInset }
+        set { bottomInset = newValue }
+    }
+
+    func makeUIView(context: Context) -> PlaybackFloatingDrawingToggleAnchorView {
+        let view = PlaybackFloatingDrawingToggleAnchorView()
+        view.update(
+            isActive: isActive,
+            horizontalInset: horizontalInset,
+            bottomInset: bottomInset,
+            action: action
+        )
+        return view
+    }
+
+    func updateUIView(_ uiView: PlaybackFloatingDrawingToggleAnchorView, context: Context) {
+        uiView.update(
+            isActive: isActive,
+            horizontalInset: horizontalInset,
+            bottomInset: bottomInset,
+            action: action
+        )
+    }
+
+    static func dismantleUIView(_ uiView: PlaybackFloatingDrawingToggleAnchorView, coordinator: ()) {
+        uiView.uninstallFloatingButton()
+    }
+}
+
+final class PlaybackFloatingDrawingToggleAnchorView: UIView {
+    private let floatingButton = UIButton(type: .custom)
+    private var leadingConstraint: NSLayoutConstraint?
+    private var bottomConstraint: NSLayoutConstraint?
+    private weak var installedWindow: UIWindow?
+    private var action: (() -> Void)?
+    private var isInstalled = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        isHidden = true
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
+
+        floatingButton.translatesAutoresizingMaskIntoConstraints = false
+        floatingButton.accessibilityLabel = String(localized: "Drawing tools")
+        floatingButton.layer.cornerRadius = 25
+        floatingButton.layer.borderWidth = 1
+        floatingButton.layer.borderColor = UIColor.white.withAlphaComponent(0.14).cgColor
+        floatingButton.clipsToBounds = true
+        floatingButton.addTarget(self, action: #selector(handleTap), for: .touchUpInside)
+        floatingButton.widthAnchor.constraint(equalToConstant: 50).isActive = true
+        floatingButton.heightAnchor.constraint(equalToConstant: 50).isActive = true
+        updateAppearance(isActive: false)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+
+        if window == nil {
+            uninstallFloatingButton()
+        } else {
+            installFloatingButtonIfNeeded()
+        }
+    }
+
+    func update(
+        isActive: Bool,
+        horizontalInset: CGFloat,
+        bottomInset: CGFloat,
+        action: @escaping () -> Void
+    ) {
+        self.action = action
+        installFloatingButtonIfNeeded()
+        updateAppearance(isActive: isActive)
+        leadingConstraint?.constant = horizontalInset
+        bottomConstraint?.constant = -bottomInset
+        installedWindow?.layoutIfNeeded()
+    }
+
+    func uninstallFloatingButton() {
+        floatingButton.removeFromSuperview()
+        leadingConstraint = nil
+        bottomConstraint = nil
+        installedWindow = nil
+        isInstalled = false
+    }
+
+    private func installFloatingButtonIfNeeded() {
+        guard let window else { return }
+
+        if installedWindow !== window {
+            uninstallFloatingButton()
+        }
+
+        guard !isInstalled else { return }
+
+        installedWindow = window
+        isInstalled = true
+        window.addSubview(floatingButton)
+
+        leadingConstraint = floatingButton.leadingAnchor.constraint(
+            equalTo: window.safeAreaLayoutGuide.leadingAnchor
+        )
+        bottomConstraint = floatingButton.bottomAnchor.constraint(
+            equalTo: window.safeAreaLayoutGuide.bottomAnchor
+        )
+
+        NSLayoutConstraint.activate([
+            leadingConstraint,
+            bottomConstraint
+        ].compactMap { $0 })
+    }
+
+    private func updateAppearance(isActive: Bool) {
+        let imageConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .bold)
+        let image = UIImage(systemName: "pencil.tip.crop.circle", withConfiguration: imageConfig)
+        floatingButton.setImage(image, for: .normal)
+        floatingButton.tintColor = .white
+        floatingButton.backgroundColor = isActive
+            ? UIColor.systemBlue.withAlphaComponent(0.96)
+            : UIColor.black.withAlphaComponent(0.7)
+    }
+
+    @objc
+    private func handleTap() {
+        action?()
+    }
+}
+
+struct PlaybackDrawingCanvas: UIViewRepresentable {
+    let drawing: PKDrawing
+    let isDrawingEnabled: Bool
+    let onDrawingChanged: (PKDrawing) -> Void
+    let onToolPickerHeightChanged: (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            onDrawingChanged: onDrawingChanged,
+            onToolPickerHeightChanged: onToolPickerHeightChanged
+        )
+    }
+
+    func makeUIView(context: Context) -> PlaybackDrawingCanvasContainerView {
+        let view = PlaybackDrawingCanvasContainerView()
+        view.canvasView.delegate = context.coordinator
+        view.onToolPickerHeightChanged = context.coordinator.onToolPickerHeightChanged
+        configure(view)
+        return view
+    }
+
+    func updateUIView(_ uiView: PlaybackDrawingCanvasContainerView, context: Context) {
+        configure(uiView)
+    }
+
+    static func dismantleUIView(_ uiView: PlaybackDrawingCanvasContainerView, coordinator: Coordinator) {
+        uiView.setToolPickerVisible(false)
+        uiView.canvasView.delegate = nil
+    }
+
+    private func configure(_ view: PlaybackDrawingCanvasContainerView) {
+        if view.canvasView.drawing.dataRepresentation() != drawing.dataRepresentation() {
+            view.canvasView.drawing = drawing
+        }
+
+        view.onToolPickerHeightChanged = onToolPickerHeightChanged
+        view.canvasView.isUserInteractionEnabled = isDrawingEnabled
+        view.setToolPickerVisible(isDrawingEnabled)
+    }
+
+    final class Coordinator: NSObject, PKCanvasViewDelegate {
+        private let onDrawingChanged: (PKDrawing) -> Void
+        let onToolPickerHeightChanged: (CGFloat) -> Void
+
+        init(
+            onDrawingChanged: @escaping (PKDrawing) -> Void,
+            onToolPickerHeightChanged: @escaping (CGFloat) -> Void
+        ) {
+            self.onDrawingChanged = onDrawingChanged
+            self.onToolPickerHeightChanged = onToolPickerHeightChanged
+        }
+
+        func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
+            onDrawingChanged(canvasView.drawing)
+        }
+    }
+}
+
+final class PlaybackDrawingCanvasContainerView: UIView, PKToolPickerObserver {
+    let canvasView = PKCanvasView()
+    var onToolPickerHeightChanged: ((CGFloat) -> Void)?
+
+    private var toolPicker: PKToolPicker?
+    private var wantsToolPickerVisible = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+
+        isOpaque = false
+        backgroundColor = .clear
+
+        canvasView.backgroundColor = .clear
+        canvasView.isOpaque = false
+        canvasView.isScrollEnabled = false
+        canvasView.drawingPolicy = .anyInput
+        canvasView.tool = PKInkingTool(.pen, color: .systemRed, width: 6)
+        canvasView.alwaysBounceVertical = false
+        canvasView.alwaysBounceHorizontal = false
+        canvasView.contentInset = .zero
+        canvasView.isUserInteractionEnabled = false
+
+        addSubview(canvasView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        canvasView.frame = bounds
+        canvasView.contentSize = bounds.size
+        reportToolPickerHeight()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateToolPickerVisibility()
+    }
+
+    func setToolPickerVisible(_ isVisible: Bool) {
+        wantsToolPickerVisible = isVisible
+        updateToolPickerVisibility()
+    }
+
+    private func updateToolPickerVisibility() {
+        if wantsToolPickerVisible {
+            guard window != nil else { return }
+
+            if toolPicker == nil {
+                let picker = PKToolPicker()
+                picker.addObserver(canvasView)
+                picker.addObserver(self)
+                toolPicker = picker
+            }
+
+            toolPicker?.setVisible(true, forFirstResponder: canvasView)
+            if !canvasView.isFirstResponder {
+                canvasView.becomeFirstResponder()
+            }
+            reportToolPickerHeight()
+        } else {
+            toolPicker?.setVisible(false, forFirstResponder: canvasView)
+            toolPicker?.removeObserver(canvasView)
+            toolPicker?.removeObserver(self)
+            if canvasView.isFirstResponder {
+                canvasView.resignFirstResponder()
+            }
+            toolPicker = nil
+            onToolPickerHeightChanged?(0)
+        }
+    }
+
+    func toolPickerFramesObscuredDidChange(_ toolPicker: PKToolPicker) {
+        reportToolPickerHeight()
+    }
+
+    func toolPickerVisibilityDidChange(_ toolPicker: PKToolPicker) {
+        reportToolPickerHeight()
+    }
+
+    private func reportToolPickerHeight() {
+        guard wantsToolPickerVisible, let toolPicker else {
+            onToolPickerHeightChanged?(0)
+            return
+        }
+
+        let obscuredFrame = toolPicker.frameObscured(in: self)
+        onToolPickerHeightChanged?(max(0, obscuredFrame.height))
     }
 }
 

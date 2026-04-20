@@ -49,6 +49,7 @@ struct GalleryScreen: View {
     var body: some View {
         GeometryReader { proxy in
             let isLandscape = proxy.size.width > proxy.size.height
+            let drawingModeEnabled = currentViewModel?.isDrawingModeEnabled ?? false
 
             ZStack {
                 Color.black.ignoresSafeArea()
@@ -64,6 +65,7 @@ struct GalleryScreen: View {
                     .id(isLandscape)
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .ignoresSafeArea()
+                    .allowsHitTesting(!drawingModeEnabled)
 
                     if let currentViewModel {
                         PlaybackScreen(

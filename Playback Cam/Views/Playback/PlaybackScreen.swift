@@ -1,12 +1,15 @@
 import SwiftUI
 
 struct PlaybackScreen: View {
+    private static let bottomChromeAnimationDuration: TimeInterval = 0.22
     @ObservedObject var viewModel: PlaybackViewModel
     private let showsBackground: Bool
     private let showsPlaybackSurface: Bool
     private let showsEdgeTreatment: Bool
     private let managesPlayerLifecycle: Bool
     @State private var deviceOrientation = UIDevice.current.orientation
+    @State private var bottomChromeLift: CGFloat = 0
+    @State private var bottomChromeAnimationTask: Task<Void, Never>?
 
     init(
         viewModel: PlaybackViewModel,
@@ -38,6 +41,8 @@ struct PlaybackScreen: View {
                         .ignoresSafeArea()
                 }
 
+                drawingOverlay
+
                 if showsEdgeTreatment {
                     PlaybackEdgeTreatment()
                         .ignoresSafeArea()
@@ -49,27 +54,36 @@ struct PlaybackScreen: View {
 
                 scrubOverlay(isLandscape: usesLandscapeControls, availableWidth: proxy.size.width)
 
+                drawingToolsOverlay(isLandscape: usesLandscapeControls)
+
                 if let saveMessage = viewModel.saveMessage {
                     saveToast(message: saveMessage, isLandscape: usesLandscapeControls)
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: usesLandscapeControls)
+            .ignoresSafeArea(.keyboard, edges: .bottom)
             .persistentSystemOverlays(usesDeferredSystemGestures ? .hidden : .visible)
             .defersSystemGestures(on: usesDeferredSystemGestures ? .bottom : [])
         }
         .onAppear {
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
             updateDeviceOrientation(with: UIDevice.current.orientation)
+            bottomChromeLift = targetDrawingToolsLift
             guard managesPlayerLifecycle else { return }
             viewModel.onAppear()
         }
         .onDisappear {
             UIDevice.current.endGeneratingDeviceOrientationNotifications()
+            cancelBottomChromeAnimation()
+            viewModel.setDrawingModeEnabled(false)
             guard managesPlayerLifecycle else { return }
             viewModel.onDisappear()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             updateDeviceOrientation(with: UIDevice.current.orientation)
+        }
+        .onChange(of: viewModel.isDrawingModeEnabled) { _, _ in
+            animateBottomChromeLift(to: targetDrawingToolsLift)
         }
     }
 
@@ -81,6 +95,18 @@ struct PlaybackScreen: View {
             PlaybackPlayerView(player: viewModel.player)
                 .allowsHitTesting(false)
         }
+    }
+
+    private var drawingOverlay: some View {
+        PlaybackDrawingCanvas(
+            drawing: viewModel.drawing,
+            isDrawingEnabled: viewModel.isDrawingModeEnabled,
+            onDrawingChanged: viewModel.updateDrawing,
+            onToolPickerHeightChanged: { _ in }
+        )
+        .ignoresSafeArea()
+        .opacity(viewModel.isDrawingModeEnabled ? 1 : 0)
+        .allowsHitTesting(viewModel.isDrawingModeEnabled)
     }
 
     private func topOverlay(isLandscape: Bool) -> some View {
@@ -103,7 +129,7 @@ struct PlaybackScreen: View {
 
         return VStack {
             HStack {
-                Button(action: viewModel.discardRecording) {
+                Button(action: discardRecording) {
                     Image(systemName: "xmark")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(.white)
@@ -122,7 +148,7 @@ struct PlaybackScreen: View {
                 Spacer(minLength: 0)
 
                 if viewModel.showsSaveButton {
-                    Button(action:  viewModel.saveToPhotoLibrary) {
+                    Button(action: saveRecording) {
                         Image(systemName: "square.and.arrow.down")
                             .padding(.bottom, 5)
                             .font(.system(size: 18, weight: .bold))
@@ -136,22 +162,22 @@ struct PlaybackScreen: View {
                                 Circle()
                                     .stroke(.white.opacity(0.14), lineWidth: 1)
                             }
-                }
-                .buttonStyle(PlaybackPressStyle())
-                .opacity(viewModel.isSaving ? 0.42 : 1)
-                .overlay {
-                    if viewModel.isSaving {
-                        ProgressView()
+                    }
+                    .buttonStyle(PlaybackPressStyle())
+                    .opacity(viewModel.isSaving ? 0.42 : 1)
+                    .overlay {
+                        if viewModel.isSaving {
+                            ProgressView()
                                 .tint(.white)
                         }
                     }
                     .disabled(viewModel.isSaving)
                 }
-        }
-        .padding(.top, topInset)
-        .padding(.horizontal, edgeInset)
+            }
+            .padding(.top, topInset)
+            .padding(.horizontal, edgeInset)
 
-        Spacer(minLength: 0)
+            Spacer(minLength: 0)
         }
         .ignoresSafeArea(edges: (!isPad && !isLandscape) ? .top : [])
     }
@@ -174,6 +200,7 @@ struct PlaybackScreen: View {
             .padding(.vertical, 12)
             .padding(.horizontal, isLandscape ? (isPad ? 0 : 108) : 12)
             .padding(.bottom, isPad ? 24 : (isLandscape ? 12 : 100))
+            .offset(y: isLandscape ? 0 : -bottomChromeLift)
         }
     }
 
@@ -313,7 +340,6 @@ struct PlaybackScreen: View {
                             holdAction: { viewModel.beginTransportPlayback(direction: 1) },
                             holdEndAction: viewModel.endTransportPlayback
                         )
-                        
                     }
                     .padding(7)
                     .background {
@@ -337,10 +363,12 @@ struct PlaybackScreen: View {
                                     .stroke(.white.opacity(0.14), lineWidth: 1)
                             }
                     }
+
                 }
                 .frame(maxWidth: isPad ? 420 : .infinity)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, isPad ? 40 : 24)
+                .offset(y: -bottomChromeLift)
             }
         }
     }
@@ -416,6 +444,7 @@ struct PlaybackScreen: View {
                         .stroke(.white.opacity(0.14), lineWidth: 1)
                 }
                 .padding(.bottom, isLandscape ? 28 : 150)
+                .offset(y: isLandscape ? 0 : -bottomChromeLift)
         }
     }
 
@@ -423,9 +452,123 @@ struct PlaybackScreen: View {
         UIDevice.current.userInterfaceIdiom == .pad
     }
 
+    private var targetDrawingToolsLift: CGFloat {
+        guard viewModel.isDrawingModeEnabled else { return 0 }
+        return isPad ? 138 : 126
+    }
+
+    private func drawingToolsOverlay(isLandscape: Bool) -> some View {
+        PlaybackFloatingDrawingToggleOverlay(
+            isActive: viewModel.isDrawingModeEnabled,
+            horizontalInset: drawingToolsHorizontalInset(isLandscape: isLandscape),
+            bottomInset: drawingToolsBottomInset(isLandscape: isLandscape),
+            action: viewModel.toggleDrawingMode
+        )
+        .frame(width: 0, height: 0)
+        .allowsHitTesting(false)
+    }
+
+    private func drawingToolsHorizontalInset(isLandscape: Bool) -> CGFloat {
+        playbackChromeInsets(isLandscape: isLandscape).horizontal
+    }
+
+    private func drawingToolsBottomInset(isLandscape: Bool) -> CGFloat {
+        if !isLandscape {
+            return portraitControlsCenterlineOffset + bottomChromeLift - drawingToggleRadius
+        }
+
+        let insets = playbackChromeInsets(isLandscape: isLandscape)
+        return insets.vertical + bottomChromeLift
+    }
+
+    private var portraitControlsCenterlineOffset: CGFloat {
+        max(portraitSpeedPickerHeight, portraitTransportChromeHeight) / 2
+    }
+
+    private var portraitSpeedPickerHeight: CGFloat {
+        isPad ? 86 : 96
+    }
+
+    private var portraitTransportChromeHeight: CGFloat {
+        40 + (7 * 2)
+    }
+
+    private var drawingToggleRadius: CGFloat {
+        25
+    }
+
+    private func discardRecording() {
+        viewModel.clearDrawing()
+        viewModel.setDrawingModeEnabled(false)
+        viewModel.discardRecording()
+    }
+
+    private func saveRecording() {
+        viewModel.clearDrawing()
+        viewModel.setDrawingModeEnabled(false)
+        viewModel.saveToPhotoLibrary()
+    }
+
+    private func playbackChromeInsets(isLandscape: Bool) -> (horizontal: CGFloat, vertical: CGFloat) {
+        let horizontal: CGFloat
+        if isPad {
+            horizontal = 46
+        } else if isLandscape {
+            horizontal = 0
+        } else {
+            horizontal = 24
+        }
+
+        let vertical: CGFloat
+        if isPad {
+            vertical = 22
+        } else if isLandscape {
+            vertical = 10
+        } else {
+            vertical = horizontal
+        }
+
+        return (horizontal, vertical)
+    }
+
     private func updateDeviceOrientation(with orientation: UIDeviceOrientation) {
         guard orientation.isLandscape || orientation.isPortrait else { return }
         deviceOrientation = orientation
+    }
+
+    private func animateBottomChromeLift(to target: CGFloat) {
+        cancelBottomChromeAnimation()
+
+        let start = bottomChromeLift
+        guard start != target else {
+            bottomChromeLift = target
+            return
+        }
+
+        bottomChromeAnimationTask = Task { @MainActor in
+            let startTime = Date()
+            let duration = PlaybackScreen.bottomChromeAnimationDuration
+
+            while !Task.isCancelled {
+                let progress = min(Date().timeIntervalSince(startTime) / duration, 1)
+                let easedProgress = 0.5 - (cos(.pi * progress) / 2)
+                bottomChromeLift = start + ((target - start) * easedProgress)
+
+                if progress >= 1 {
+                    break
+                }
+
+                try? await Task.sleep(nanoseconds: 16_666_667)
+            }
+
+            bottomChromeLift = target
+            bottomChromeAnimationTask = nil
+        }
+    }
+
+    private func cancelBottomChromeAnimation() {
+        bottomChromeAnimationTask?.cancel()
+        bottomChromeAnimationTask = nil
     }
 }
 
